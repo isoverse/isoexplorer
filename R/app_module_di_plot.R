@@ -1,147 +1,163 @@
 # Dual Inlet plot UI + server =====
+# shared logic lives in logic_plots.R; plot options sidebar in app_plots.R.
+# this module takes a reactive get_isofiles(), aggregates it itself with the
+# intensity units picked in the plot controls, and lets the user pick masses per
+# species via popover checkboxes that replot immediately.
 
 di_plot_ui <- function(id) {
   ns <- NS(id)
-
   bslib::layout_sidebar(
-    padding = 0,
-    # LEFT: mass selector ----
-    sidebar = bslib::sidebar(
-      position = "left",
-      width = "200",
-      fillable = TRUE,
-      bslib::card(
-        full_screen = TRUE,
-        min_height = 300,
-        padding = 0,
-        module_selector_table_ui(ns("masses"))
-      )
-    ),
-    # CENTER + RIGHT ----
-    bslib::layout_sidebar(
-      fill = TRUE,
-      # RIGHT: plot options ----
-      sidebar = bslib::sidebar(
-        position = "right",
-        width = "160",
-        title = "Plot Options",
+    fill = TRUE,
+    # right: plot options (legend / font / scientific)
+    sidebar = plot_options_sidebar(ns),
+    bslib::card_body(
+      min_height = 400,
+      # top of the plot: units picker + per-species mass buttons + (re)plot
+      div(
+        class = "d-flex flex-wrap align-items-center gap-2 mb-2",
         selectInput(
-          ns("legend_position"),
-          "Legend:",
-          choices = c("right", "bottom", "top", "left", "hide"),
-          selected = "right"
-        ),
-        numericInput(ns("font_size"), "Font size:", value = 16, min = 6, step = 1),
-        checkboxInput(ns("scientific"), "Scientific notation", value = FALSE)
+          ns("units"),
+          label = NULL,
+          choices = ie_units(),
+          selected = "mV",
+          width = "72px"
+        ) |>
+          add_tooltip("Intensity units to aggregate the data with"),
+        uiOutput(ns("species_buttons")),
+        div(
+          class = "ms-auto",
+          actionButton(ns("plot_refresh"), "(Re)plot", icon = icon("sync")) |>
+            add_tooltip("Refresh the plot with the current options.")
+        )
       ),
-      # CENTER: controls + plot ----
-      bslib::card_body(
-        min_height = 400,
-        fluidRow(
-          column(
-            width = 12,
-            align = "right",
-            actionButton(ns("plot_refresh"), "(Re)plot", icon = icon("sync")) |>
-              add_tooltip("Refresh the plot with the current selection and options.")
-          )
-        ),
-        plotOutput(ns("data_plot")) |>
-          shinycssloaders::withSpinner() |>
-          bslib::as_fill_carrier()
-      )
+      plotOutput(ns("data_plot")) |>
+        shinycssloaders::withSpinner() |>
+        bslib::as_fill_carrier()
     )
   )
 }
 
-di_plot_server <- function(id, get_aggregated_data, get_selected_metadata) {
+di_plot_server <- function(id, get_isofiles) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
     values <- reactiveValues(refresh_trigger = 0)
 
-    # MASS SELECTOR ----
+    # aggregate the isofiles with the selected intensity units
+    get_aggregated_data <- reactive({
+      req(get_isofiles())
+      req(input$units)
+      log_info(
+        ns = ns,
+        user_msg = paste("Aggregating with intensity units", input$units)
+      )
+      out <- isoreader2::ir_aggregate_isofiles(
+        get_isofiles(),
+        intensity_units = input$units
+      ) |>
+        try_catch_cnds()
+      out |> log_cnds(ns = ns)
+      out$result
+    })
 
-    get_masses_for_table <- reactive({
+    # species -> available masses (drives the buttons + the selection state)
+    species_masses <- reactive({
       req(get_aggregated_data())
       cycles <- get_aggregated_data()$cycles
       validate(need(
         !is.null(cycles) && nrow(cycles) > 0,
         "No dual inlet cycle data available."
       ))
-      out <- cycles |>
-        dplyr::select(dplyr::any_of(c("mass", "species"))) |>
-        dplyr::distinct() |>
-        dplyr::arrange(as.numeric(.data$mass)) |>
-        dplyr::mutate(
-          mass_id = if ("species" %in% names(cycles)) {
-            paste(.data$mass, .data$species, sep = ":")
-          } else {
-            as.character(.data$mass)
-          },
-          .before = 1L
-        ) |>
-        try_catch_cnds()
+      out <- species_mass_groups(cycles) |> try_catch_cnds()
       out |> log_cnds(ns = ns)
       out$result
     })
 
-    masses <- module_selector_table_server(
-      "masses",
-      get_data = get_masses_for_table,
-      id_column = "mass_id",
-      columnDefs = list(list(visible = FALSE, targets = 0)),
-      paging = FALSE,
-      dom = "ft"
-    )
-
-    observeEvent(masses$is_table_reloaded(), {
-      if (is_empty(masses$get_selected_ids())) {
-        masses$select_all()
-      }
+    # one button per species; clicking opens a popover with a mass checkbox each
+    # (all on by default). IDs are mass_<species-index>_<mass-index>.
+    output$species_buttons <- renderUI({
+      g <- species_masses()
+      req(!is.null(g) && nrow(g) > 0)
+      buttons <- lapply(seq_len(nrow(g)), function(i) {
+        species <- g$species[i]
+        species_masses_i <- g$masses[[i]]
+        checks <- lapply(seq_along(species_masses_i), function(j) {
+          checkboxInput(
+            ns(paste0("mass_", i, "_", j)),
+            label = species_masses_i[j],
+            value = TRUE
+          )
+        })
+        bslib::popover(
+          actionButton(
+            ns(paste0(species, "-trigger")),
+            species,
+            icon = icon("caret-down")
+          ),
+          title = species,
+          div(checks),
+          options = list(trigger = "focus")
+        )
+      })
+      tagList(buttons)
+      #div(class = "d-flex flex-wrap gap-1 align-items-center", buttons)
     })
 
-    # PLOT ----
+    # selected (species, mass) pairs across all popovers. A checkbox that hasn't
+    # reported yet (popover never opened) counts as selected, so the plot shows
+    # everything at startup without the user opening each popover.
+    get_selected_masses <- reactive({
+      g <- species_masses()
+      req(!is.null(g) && nrow(g) > 0)
+      rows <- list()
+      for (i in seq_len(nrow(g))) {
+        species_masses_i <- g$masses[[i]]
+        for (j in seq_along(species_masses_i)) {
+          checked <- input[[paste0("mass_", i, "_", j)]] %||% TRUE
+          if (isTRUE(checked)) {
+            rows[[length(rows) + 1L]] <- tibble::tibble(
+              species = g$species[i],
+              mass = species_masses_i[j]
+            )
+          }
+        }
+      }
+      dplyr::bind_rows(rows)
+    })
 
+    # plot
     refresh_plot <- function() {
       values$refresh_trigger <- values$refresh_trigger + 1L
     }
     observeEvent(input$plot_refresh, refresh_plot())
 
-    generate_plot <- eventReactive(values$refresh_trigger, {
-      isolate({
-        agg_data <- filter_agg_data_by_metadata(get_aggregated_data(), get_selected_metadata())
-        cycles <- agg_data$cycles
-        selected <- masses$get_selected_items()
-
-        if (is.null(agg_data) || is.null(cycles) || nrow(cycles) == 0 || is.null(selected) || nrow(selected) == 0) {
-          return(get_empty_plot_in_app(input$font_size))
-        }
-
-        agg_data$cycles <- filter_by_selected_masses(cycles, selected)
-
-        if (nrow(agg_data$cycles) == 0) {
-          return(get_empty_plot_in_app(input$font_size))
-        }
-
-        out <- isoreader2::ir_plot_dual_inlet(
-          agg_data,
-          scientific = isTRUE(input$scientific),
-          theme = isoreader2::ir_default_theme(text_size = input$font_size)
-        ) |>
-          try_catch_cnds()
-        out |> log_cnds(ns = ns)
-
-        p <- out$result
-        if (!is.null(p)) {
-          p <- p + if (input$legend_position == "hide") {
-            theme(legend.position = "none")
-          } else {
-            theme(legend.position = input$legend_position)
-          }
-        }
-        p
-      })
-    })
+    # (re)plot on manual refresh, when the data (units) change, or when the mass
+    # selection changes - so toggling masses replots immediately and the plot
+    # renders at startup
+    generate_plot <- eventReactive(
+      {
+        values$refresh_trigger
+        get_aggregated_data()
+        get_selected_masses()
+      },
+      {
+        isolate({
+          out <- build_data_plot(
+            get_aggregated_data(),
+            dataset_key = "cycles",
+            selected_masses = get_selected_masses(),
+            plot_fn = isoreader2::ir_plot_dual_inlet,
+            font_size = input$font_size,
+            scientific = input$scientific,
+            legend_position = input$legend_position
+          ) |>
+            try_catch_cnds()
+          out |> log_cnds(ns = ns)
+          out$result %||% make_empty_plot(input$font_size)
+        })
+      },
+      ignoreNULL = FALSE
+    )
 
     output$data_plot <- renderPlot(generate_plot(), res = 96)
 
