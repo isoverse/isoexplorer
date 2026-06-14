@@ -1,28 +1,25 @@
+# toolbar above the selector table: selection controls on the left (single/multi
+# toggle plus select-all / deselect, which only show in multiple mode), view +
+# filter controls on the right; the table flexibly fills the remaining space
 metadata_ui <- function(id) {
   ns <- NS(id)
-
-  bslib::accordion(
-    id = ns("accordion"),
-    multiple = TRUE,
-    bslib::accordion_panel(
-      "Metadata",
-      icon = icon("file-lines"),
-      bslib::card(
-        full_screen = TRUE,
-        min_height = 600,
-        bslib::layout_sidebar(
-          sidebar = bslib::sidebar(
-            position = "left",
-            width = "160",
-            module_selector_table_select_all_button(ns("metadata"), border = FALSE),
-            module_selector_table_deselect_all_button(ns("metadata"), border = FALSE),
-            module_selector_table_columns_button(ns("metadata"), border = FALSE),
-            module_selector_table_search_button(ns("metadata"), border = FALSE)
-          ),
-          module_selector_table_ui(ns("metadata"))
-        ),
-        bslib::card_footer("Select the file(s) you want to work with.")
+  bslib::card_body(
+    div(
+      class = "d-flex align-items-center justify-content-between gap-2 mb-2",
+      # left: selection controls
+      div(
+        class = "d-flex gap-2",
+        module_selector_table_selection_button(ns("metadata")),
+        module_selector_table_select_all_button(ns("metadata")),
+        module_selector_table_deselect_all_button(ns("metadata"))
+      ),
+      # right: view / filter controls
+      div(
+        class = "d-flex gap-2",
+        module_selector_table_columns_button(ns("metadata")),
+        module_selector_table_search_button(ns("metadata"))
       )
-    )
+    ),
+    module_selector_table_ui(ns("metadata"))
   )
 }
