@@ -92,6 +92,36 @@ ie_file_server <- function(
     get_units <- reactive(units())
     set_units <- function(new_units) units(new_units)
 
+    # surface any isoreader2 `$problems` recorded in a read/aggregate result.
+    # These are collected internally, NOT thrown as R conditions, so
+    # try_catch_cnds() never sees them. We display exactly what ir_show_problems()
+    # prints -- its concise, cli-formatted summary -- captured with cli::cli_fmt()
+    # (no backtraces) in a modal dialog (line breaks kept via \n -> <br>, like
+    # log_error). `last_problems` dedups: a read and its follow-up aggregation, and
+    # every units-driven re-aggregation, all re-surface the SAME problems, so we
+    # only pop the dialog when a genuinely new problem appears.
+    last_problems <- ""
+    log_problems <- function(result, user_msg) {
+      if (is.null(result) || nrow(isoreader2::ir_get_problems(result)) == 0) {
+        return(invisible(NULL))
+      }
+      summary <- paste(
+        cli::cli_fmt(isoreader2::ir_show_problems(result)),
+        collapse = "\n"
+      )
+      if (identical(summary, last_problems)) {
+        return(invisible(NULL))
+      }
+      last_problems <<- summary
+      rlog::log_warn(paste0("[", ns(NULL), "] ", user_msg, "\n", summary))
+      showModal(modalDialog(
+        title = user_msg,
+        pre(HTML(gsub("\\n", "<br>", cli::ansi_html(summary)))),
+        easyClose = TRUE,
+        footer = modalButton("Close")
+      ))
+    }
+
     # RUNNING set of read isofiles =====
     # grows as files are added; already-read files (by file_path) are never
     # re-read -- new files are read, then combined onto the running set with c().
@@ -123,6 +153,7 @@ ie_file_server <- function(
       out <- isoreader2::ir_read_isofiles(new, show_progress = FALSE) |>
         try_catch_cnds()
       out |> log_cnds(ns = ns)
+      log_problems(out$result, "Problem(s) reading data files")
       merge_isofiles(out$result)
     }
 
@@ -166,6 +197,7 @@ ie_file_server <- function(
           if (!identical(state$key, key)) {
             res <- aggregate(iso) |> try_catch_cnds()
             res |> log_cnds(ns = ns)
+            log_problems(res$result, "Problem(s) aggregating data")
             out(res$result)
             state <<- list(paths = iso$file_path, key = key)
             return()
@@ -178,6 +210,7 @@ ie_file_server <- function(
           class(new_iso) <- class(iso)
           res <- aggregate(new_iso) |> try_catch_cnds()
           res |> log_cnds(ns = ns)
+          log_problems(res$result, "Problem(s) aggregating data")
           cur <- out()
           out(if (is.null(cur)) res$result else c(cur, res$result))
           state <<- list(paths = iso$file_path, key = key)
