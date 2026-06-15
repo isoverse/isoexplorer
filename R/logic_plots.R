@@ -17,22 +17,63 @@ make_empty_plot <- function(font_size = 16) {
     ggplot2::theme_void()
 }
 
-# filter all datasets in agg_data to only the uidx values present in selected_metadata
-# returns NULL if no rows are selected
+# filter all datasets in agg_data to only the analyses present in
+# selected_metadata. A file (uidx) can hold several analyses, so we match on
+# (uidx, analysis) -- matching on uidx alone would pull in unselected analyses of
+# a partially-selected file. Tables lacking an analysis column fall back to uidx.
+# Returns NULL if no rows are selected.
 filter_agg_data_by_metadata <- function(agg_data, selected_metadata) {
   if (is.null(selected_metadata) || nrow(selected_metadata) == 0) {
     return(NULL)
   }
-  selected_uidx <- selected_metadata$uidx
+  key_cols <- intersect(c("uidx", "analysis"), names(selected_metadata))
+  keep <- dplyr::distinct(dplyr::select(
+    selected_metadata,
+    dplyr::all_of(key_cols)
+  ))
   for (ds in c("metadata", "traces", "cycles", "scans")) {
-    if (!is.null(agg_data[[ds]]) && "uidx" %in% names(agg_data[[ds]])) {
-      agg_data[[ds]] <- dplyr::filter(
-        agg_data[[ds]],
-        .data$uidx %in% selected_uidx
+    tbl <- agg_data[[ds]]
+    if (is.null(tbl)) {
+      next
+    }
+    join_cols <- intersect(key_cols, names(tbl))
+    if (length(join_cols) > 0) {
+      agg_data[[ds]] <- dplyr::semi_join(
+        tbl,
+        keep,
+        by = join_cols
       )
     }
   }
   agg_data
+}
+
+# the selector-table row ids (its `row_id` id column) to select so the table
+# visually reflects a file-server selection. NULL table data -> NULL (no table
+# yet); NULL selection -> all rows (the "all" case); a 0-row selection -> none;
+# otherwise the rows matching the selection on (uidx, analysis) -- same
+# granularity as the data filtering, so a partial-file selection highlights
+# exactly those analyses, not the whole file.
+initial_selection_row_ids <- function(table_data, selection) {
+  if (is.null(table_data)) {
+    return(NULL)
+  }
+  if (is.null(selection)) {
+    return(table_data$row_id)
+  }
+  # 0-row "none" selection (a bare tibble has no key columns) -> select nothing
+  if (nrow(selection) == 0L) {
+    return(table_data$row_id[0])
+  }
+  key_cols <- intersect(
+    c("uidx", "analysis"),
+    intersect(names(table_data), names(selection))
+  )
+  if (length(key_cols) == 0L) {
+    return(table_data$row_id[0])
+  }
+  keep <- dplyr::distinct(dplyr::select(selection, dplyr::all_of(key_cols)))
+  dplyr::semi_join(table_data, keep, by = key_cols)$row_id
 }
 
 # distinct mass (+ species) rows of a dataset, sorted by mass, with a unique
