@@ -1,16 +1,25 @@
-# Scans plot UI + server =====
-# thin wrapper over the shared data-plot framework (app_plots.R): plots the
-# aggregated `scans` with ir_plot_scans, plus a scan-type popover that lists the
-# scan types present in the data (ir_plot_scans plots one type at a time).
-
-scans_plot_ui <- function(id) {
+#' Scans plot module
+#'
+#' A plot view for scan data, wired to a [ie_file_server()]: it plots the
+#' selection-filtered aggregated `scans` with [isoreader2::ir_plot_scans()], with
+#' unit, species/mass, legend, zoom and PDF-download controls plus a scan-type
+#' popover (scans are plotted one type at a time). Pair `ie_scans_plot_ui()` and
+#' `ie_scans_plot_server()` on one `id`.
+#'
+#' @inheritParams ie_metadata_server
+#' @return `ie_scans_plot_ui()` returns a UI element; `ie_scans_plot_server()` is called
+#'   for its side effects
+#' @seealso [ie_file_server()], [ie_scans_metadata_server()]
+#' @name ie_scans_plot
+#' @export
+ie_scans_plot_ui <- function(id) {
   ns <- NS(id)
   data_plot_view_ui(
     id,
     extra_left = bslib::popover(
       actionButton(
         ns("scan_type-trigger"),
-        "Scan type",
+        textOutput(ns("scan_type_label"), inline = TRUE),
         icon = icon("caret-down")
       ),
       title = "Scan type",
@@ -20,22 +29,26 @@ scans_plot_ui <- function(id) {
   )
 }
 
-scans_plot_server <- function(id, get_isofiles) {
+#' @rdname ie_scans_plot
+#' @export
+ie_scans_plot_server <- function(id, file) {
   setup_data_plot(
     id,
-    get_isofiles = get_isofiles,
+    get_data = file$get_aggregated_scans_data,
+    get_units = file$get_units,
+    set_units = file$set_units,
     dataset_key = "scans",
     plot_fn = isoreader2::ir_plot_scans,
     no_data_message = "No scan data available.",
     download_basename = "scans",
     zoom_arg = "x_window",
-    setup_extra = function(get_aggregated_data, input, output, session) {
+    setup_extra = function(get_data, input, output, session) {
       ns <- session$ns
 
       # scan types live in metadata (ir_plot_scans joins them into the scans);
       # drop NA, which marks the non-scan files in the same collection
       get_scan_types <- reactive({
-        metadata <- get_aggregated_data()$metadata
+        metadata <- get_data()$metadata
         if (is.null(metadata) || !"scan_type" %in% names(metadata)) {
           return(character(0))
         }
@@ -48,6 +61,13 @@ scans_plot_server <- function(id, get_isofiles) {
       get_scan_type <- reactive({
         types <- get_scan_types()
         input$scan_type %||% (if (length(types) > 0) types[1] else NULL)
+      })
+
+      # the button label shows the current scan type in title case (the radio
+      # choices stay as the raw scan_type values)
+      output$scan_type_label <- renderText({
+        st <- get_scan_type()
+        if (is.null(st)) "Scan type" else tools::toTitleCase(st)
       })
 
       output$scan_type_input <- renderUI({
@@ -67,7 +87,7 @@ scans_plot_server <- function(id, get_isofiles) {
         # type (scan_type lives in metadata; semi-join the scans to those files)
         filter_dataset = function(dataset) {
           st <- get_scan_type()
-          metadata <- get_aggregated_data()$metadata
+          metadata <- get_data()$metadata
           if (
             is.null(st) ||
               is.null(metadata) ||

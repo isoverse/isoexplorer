@@ -1,6 +1,7 @@
 # Selector table
 
 #' Selector table server
+#' @noRd
 #' @param get_data reactive context providing the data set
 #' @param id_column name of the ID column - must have unique values!! make a rownumber or concatenated column if there is no unique identifier, this column does NOT have to be part of available_columns (but can be)
 #' @param available_columns list of transmute statements to select columns to show
@@ -38,10 +39,9 @@ module_selector_table_server <- function(
   ordering = TRUE,
   class = "cell-border hover order-column",
   escape_headers = TRUE,
-  selection = c("multiple", "single", "none"),
+  selection = c("multiple", "none"),
   auto_reselect = TRUE,
-  enable_dblclick = FALSE,
-  select_group_on_dblclick = FALSE,
+  select_on_dblclick = FALSE,
   render_html = c(),
   formatting_calls = list(),
   editable = FALSE,
@@ -55,6 +55,7 @@ module_selector_table_server <- function(
   stopifnot(!missing(get_data))
   stopifnot(!missing(id_column))
   filter = match.arg(filter)
+  selection = match.arg(selection)
 
   # actual module server
   moduleServer(id, function(input, output, session) {
@@ -78,7 +79,6 @@ module_selector_table_server <- function(
       search = "", # search term
       order = list(), # ordering information
       filter = filter, # filter setting
-      selection = selection, # row selection mode (single/multiple/none)
       formatting_calls = formatting_calls, # formatting calls
       options = list(paging = paging, ...) # data table options
     )
@@ -191,7 +191,7 @@ module_selector_table_server <- function(
                 filter = values$filter,
                 class = class,
                 container = container,
-                selection = values$selection,
+                selection = selection,
                 fillContainer = TRUE,
                 escape = if (
                   rlang::is_call(render_html_expr) &&
@@ -230,36 +230,32 @@ module_selector_table_server <- function(
                 ),
                 callback = {
                   callback_js <- character(0)
-                  if (enable_dblclick) {
+                  if (select_on_dblclick) {
+                    # double-click to EXCLUSIVELY select: a data row reports its
+                    # own id (-> _row_dblclick); a RowGroup summary row collects
+                    # the ids of all its data rows (-> _group_dblclick)
                     callback_js <- c(
                       callback_js,
-                      "table.on('dblclick', 'td', function() {",
-                      "  var row = table.cell(this).index().row;",
-                      "  var col = table.cell(this).index().column;",
+                      "table.on('dblclick', 'tbody tr', function() {",
+                      "  if ($(this).hasClass('dtrg-group')) {",
+                      "    var ids = [];",
+                      "    var tr = $(this).next();",
+                      "    while (tr.length && !tr.hasClass('dtrg-group')) {",
+                      "      var d = table.row(tr).data();",
+                      "      if (d) { ids.push(d[0]); }",
+                      "      tr = tr.next();",
+                      "    }",
                       sprintf(
-                        "  Shiny.setInputValue('%s_dblclick', {dt_row: row, dt_col: col});",
+                        "    Shiny.setInputValue('%s_group_dblclick', ids, {priority: 'event'});",
                         ns("selection_table")
                       ),
-                      "});"
-                    )
-                  }
-                  if (select_group_on_dblclick) {
-                    # double-clicking a RowGroup summary row collects the row ids
-                    # of all the data rows in that group and reports them to Shiny
-                    callback_js <- c(
-                      callback_js,
-                      "table.on('dblclick', 'tr.dtrg-group', function() {",
-                      "  var ids = [];",
-                      "  var tr = $(this).next();",
-                      "  while (tr.length && !tr.hasClass('dtrg-group')) {",
-                      "    var d = table.row(tr).data();",
-                      "    if (d) { ids.push(d[0]); }",
-                      "    tr = tr.next();",
+                      "  } else {",
+                      "    var d = table.row(this).data();",
+                      sprintf(
+                        "    if (d) { Shiny.setInputValue('%s_row_dblclick', d[0], {priority: 'event'}); }",
+                        ns("selection_table")
+                      ),
                       "  }",
-                      sprintf(
-                        "  Shiny.setInputValue('%s_group_dblclick', ids, {priority: 'event'});",
-                        ns("selection_table")
-                      ),
                       "});"
                     )
                   }
@@ -270,11 +266,6 @@ module_selector_table_server <- function(
                   }
                 }
               )
-
-              # double click
-              observeEvent(input$selection_table_dblclick, {
-                print(input$selection_table_dblclick)
-              })
 
               # formatting calls
               if (length(values$formatting_calls) > 0) {
@@ -548,19 +539,22 @@ module_selector_table_server <- function(
     }
     observeEvent(input$deselect_all, deselect_all())
 
-    # double-click a group's summary row to toggle its rows: if the whole group
-    # is already selected, deselect it; otherwise select the whole group (added
-    # to the current selection). The JS callback reports the group's row ids.
-    # Only meaningful in multiple mode.
+    # double-click to EXCLUSIVELY select (replacing the current selection): a
+    # data row selects just that analysis; a group summary row selects all the
+    # analyses (rows) of that file. We update the table's selected rows via the
+    # proxy (DT::selectRows replaces the selection); the resulting rows_selected
+    # event then drives values$selected_ids -> downstream, so the table
+    # highlights FIRST and any consumers (file server, plot) update after.
+    observeEvent(input$selection_table_row_dblclick, {
+      DT::selectRows(
+        proxy,
+        get_index_from_id(input$selection_table_row_dblclick)
+      )
+    })
     observeEvent(input$selection_table_group_dblclick, {
-      req(identical(values$selection, "multiple"))
       group_ids <- input$selection_table_group_dblclick
       if (length(group_ids) > 0) {
-        if (all(group_ids %in% values$selected_ids)) {
-          select_rows(ids = setdiff(values$selected_ids, group_ids))
-        } else {
-          select_rows(ids = c(values$selected_ids, group_ids))
-        }
+        DT::selectRows(proxy, get_index_from_id(group_ids))
       }
     })
 
@@ -625,48 +619,6 @@ module_selector_table_server <- function(
         render_table()
       }
     })
-
-    # toggle single/multiple selection mode event =====
-    observeEvent(input$toggle_selection, {
-      values$selection <- if (identical(values$selection, "multiple")) {
-        "single"
-      } else {
-        "multiple"
-      }
-      # single mode can only hold one selection
-      if (
-        identical(values$selection, "single") &&
-          length(values$selected_ids) > 1L
-      ) {
-        values$selected_ids <- values$selected_ids[1]
-      }
-      log_info(
-        ns = ns,
-        "switching to ",
-        values$selection,
-        " selection",
-        user_msg = paste0("Switched to ", values$selection, " selection")
-      )
-      render_table()
-    })
-
-    # react to the selection mode: select-all / deselect-all only apply in
-    # multiple mode (hidden otherwise), and the toggle button shows the mode that
-    # clicking it will switch TO
-    observeEvent(
-      values$selection,
-      {
-        is_multiple <- identical(values$selection, "multiple")
-        shinyjs::toggle("select_all", condition = is_multiple)
-        shinyjs::toggle("deselect_all", condition = is_multiple)
-        updateActionButton(
-          session,
-          "toggle_selection",
-          label = if (is_multiple) "Single" else "Multiple"
-        )
-      },
-      ignoreInit = FALSE
-    )
 
     # save state ========
 
@@ -903,21 +855,6 @@ module_selector_table_search_button <- function(id, border = TRUE) {
       style = style
     ) |>
       add_tooltip("Toggle advanced column search option")
-  )
-}
-
-# Selection mode toggle button (single <-> multiple); label tracks the mode
-module_selector_table_selection_button <- function(id, border = TRUE) {
-  ns <- NS(id)
-  style <- if (!border) "border: 0;" else ""
-  tagList(
-    actionButton(
-      ns("toggle_selection"),
-      "Multiple",
-      icon = icon("list-check"),
-      style = style
-    ) |>
-      add_tooltip("Switch between single and multiple row selection")
   )
 }
 

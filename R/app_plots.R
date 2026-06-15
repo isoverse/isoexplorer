@@ -38,7 +38,7 @@ units_popover <- function(ns) {
       radioButtons(
         ns("units"),
         label = NULL,
-        choices = ie_units(),
+        choices = app_units(),
         selected = "mV"
       )
     ),
@@ -78,11 +78,14 @@ zoom_controls <- function(ns) {
 # right, plot output below, and the plot-options sidebar on the right.
 data_plot_view_ui <- function(id, extra_left = NULL) {
   ns <- NS(id)
-  bslib::layout_sidebar(
-    fill = TRUE,
-    sidebar = plot_options_sidebar(ns),
-    bslib::card_body(
-      min_height = 400,
+  # the whole card (controls + options sidebar + plot) can go fullscreen
+  bslib::card(
+    full_screen = TRUE,
+    min_height = 400,
+    bslib::layout_sidebar(
+      fill = TRUE,
+      sidebar = plot_options_sidebar(ns),
+      # controls row (units/species left, zoom centered, download right)
       div(
         class = "d-flex align-items-center gap-2 mb-2",
         # left: units + optional extra + species
@@ -103,6 +106,7 @@ data_plot_view_ui <- function(id, extra_left = NULL) {
             shinyjs::disabled()
         )
       ),
+      # plot fills the remaining space below the controls
       plotOutput(
         ns("data_plot"),
         dblclick = ns("data_plot_dblclick"),
@@ -121,19 +125,25 @@ data_plot_view_ui <- function(id, extra_left = NULL) {
 
 # server ----
 
-# wire up the shared "isofiles plot" server. `dataset_key` selects the aggregated
-# table ("traces"/"cycles"/"scans"); `plot_fn` is the ir_plot_* function;
-# `no_data_message` is shown when the dataset is empty; `download_basename` is the
-# PDF filename stem. `setup_extra(get_aggregated_data, input, output, session)` is
-# optional and returns `list(plot_args = <reactive list spliced into plot_fn>,
-# filter_dataset = <optional function(dataset) restricting the species/mass
-# options>)`; it may also set up extra outputs (e.g. the scans scan-type UI).
-# `zoom_arg` is the name of `plot_fn`'s x-window argument (cf "time_window", scans
-# "x_window"); when set, the zoom window is passed there (filters + rescales y).
-# When NULL (dual inlet), zoom is applied as a post-hoc `coord_cartesian(xlim=)`.
+# wire up the shared "isofiles plot" server. The data and units come from the
+# central file server: `get_data` is its selection-filtered aggregated data
+# reactive (e.g. file$get_aggregated_scans_data) and `get_units` / `set_units`
+# are its shared intensity-units accessors (the popover reads + drives them).
+# `dataset_key` selects the aggregated table ("traces"/"cycles"/"scans");
+# `plot_fn` is the ir_plot_* function; `no_data_message` is shown when the
+# dataset is empty; `download_basename` is the PDF filename stem.
+# `setup_extra(get_data, input, output, session)` is optional and returns
+# `list(plot_args = <reactive list spliced into plot_fn>, filter_dataset =
+# <optional function(dataset) restricting the species/mass options>)`; it may
+# also set up extra outputs (e.g. the scans scan-type UI). `zoom_arg` is the name
+# of `plot_fn`'s x-window argument (cf "time_window", scans "x_window"); when set,
+# the zoom window is passed there (filters + rescales y). When NULL (dual inlet),
+# zoom is applied as a post-hoc `coord_cartesian(xlim=)`.
 setup_data_plot <- function(
   id,
-  get_isofiles,
+  get_data,
+  get_units,
+  set_units,
   dataset_key,
   plot_fn,
   no_data_message,
@@ -148,32 +158,20 @@ setup_data_plot <- function(
     # clicked or any of its masses is (re)selected)
     hidden <- reactiveValues()
 
-    # intensity units (popover; input is NULL until first opened -> default mV)
-    get_units <- reactive(input$units %||% "mV")
+    # intensity units live in the file server (shared across all plots). Show its
+    # current value in the popover label, push popover changes back into it, and
+    # keep the radio in sync if the units get changed from elsewhere. (Setting a
+    # reactiveVal to its current value is a no-op, so this can't loop.)
     output$units_label <- renderText(get_units())
-
-    # aggregate the isofiles with the selected units
-    get_aggregated_data <- reactive({
-      req(get_isofiles())
-      log_info(
-        ns = ns,
-        user_msg = paste("Aggregating with intensity units", get_units())
-      )
-      out <- isoreader2::ir_aggregate_isofiles(
-        get_isofiles(),
-        intensity_units = get_units()
-      ) |>
-        try_catch_cnds()
-      out |> log_cnds(ns = ns)
-      out$result
-    })
+    observeEvent(input$units, set_units(input$units), ignoreInit = TRUE)
+    observe(updateRadioButtons(session, "units", selected = get_units()))
 
     # module-specific extras: `setup_extra` returns
     # list(plot_args = <reactive list spliced into plot_fn>, filter_dataset =
     # <optional function(dataset) restricting the species/mass options, e.g.
     # scans to the selected scan_type>); it may also set up extra outputs.
     extra <- if (!is.null(setup_extra)) {
-      setup_extra(get_aggregated_data, input, output, session)
+      setup_extra(get_data, input, output, session)
     } else {
       list()
     }
@@ -185,7 +183,7 @@ setup_data_plot <- function(
     # popovers (a rebuild briefly leaves duplicate bound inputs). `filter_dataset`
     # (if provided) restricts the options, e.g. scans to the selected scan_type.
     species_masses_raw <- reactive({
-      dataset <- get_aggregated_data()[[dataset_key]]
+      dataset <- get_data()[[dataset_key]]
       if (!is.null(filter_dataset)) {
         dataset <- filter_dataset(dataset)
       }
@@ -361,10 +359,11 @@ setup_data_plot <- function(
     }
     observeEvent(input$zoom_move_left, move_zoom(-1))
     observeEvent(input$zoom_move_right, move_zoom(+1))
-    # reset zoom when the data changes (units) or the extra args change (e.g. the
-    # scans scan_type, whose x-axis range differs entirely between scan types)
+    # reset zoom when the plotted data changes (units or file selection) or the
+    # extra args change (e.g. the scans scan_type, whose x-axis range differs
+    # entirely between scan types)
     observe({
-      get_aggregated_data()
+      get_data()
       get_extra_plot_args()
       isolate(values$zoom_stack <- list(list(x_min = NULL, x_max = NULL)))
     })
@@ -397,7 +396,7 @@ setup_data_plot <- function(
         build_data_plot,
         c(
           list(
-            get_aggregated_data(),
+            get_data(),
             dataset_key = dataset_key,
             selected_masses = get_selected_masses(),
             plot_fn = plot_fn,

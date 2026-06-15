@@ -127,7 +127,7 @@ log_error <- function(..., ns = NULL, user_msg = NULL, error = NULL) {
   )
 
   issue_url <- sprintf(
-    "https://github.com/KopfLab/isoexplorer/issues/new?title=%s&body=%s",
+    "https://github.com/isoverse/isoexplorer/issues/new?title=%s&body=%s",
     URLencode(issue_title, reserved = TRUE),
     URLencode(HTML(issue_body), reserved = TRUE)
   )
@@ -211,47 +211,6 @@ log_success <- function(..., ns = NULL, user_msg = NULL) {
 
 log_debug <- function(..., ns = NULL) {
   log_any(msg = paste0(..., collapse = ""), ns = ns, log_fun = rlog::log_debug)
-}
-
-# plot helpers =====
-
-get_empty_plot_in_app <- function(font_size = 16) {
-  ggplot2::ggplot() +
-    ggplot2::annotate(
-      "text", x = 0, y = 0, label = "no data",
-      vjust = 0.5, hjust = 0.5, size = font_size
-    ) +
-    ggplot2::theme_void()
-}
-
-# filter all datasets in agg_data to only the uidx values present in selected_metadata
-# returns NULL if no rows are selected
-filter_agg_data_by_metadata <- function(agg_data, selected_metadata) {
-  if (is.null(selected_metadata) || nrow(selected_metadata) == 0) {
-    return(NULL)
-  }
-  selected_uidx <- selected_metadata$uidx
-  for (ds in c("metadata", "traces", "cycles", "scans")) {
-    if (!is.null(agg_data[[ds]]) && "uidx" %in% names(agg_data[[ds]])) {
-      agg_data[[ds]] <- dplyr::filter(agg_data[[ds]], .data$uidx %in% selected_uidx)
-    }
-  }
-  agg_data
-}
-
-# filter a dataset tibble to only the mass (+ species) rows the user selected
-# selected_items is the get_selected_items() result from the mass selector table
-filter_by_selected_masses <- function(df, selected_items) {
-  join_cols <- intersect(c("mass", "species"), names(df))
-  join_cols <- intersect(join_cols, names(selected_items))
-  if (length(join_cols) == 0 || nrow(selected_items) == 0) {
-    return(df[0L, ])
-  }
-  dplyr::inner_join(
-    df,
-    dplyr::select(selected_items, dplyr::all_of(join_cols)),
-    by = join_cols
-  )
 }
 
 # ui helpers =====

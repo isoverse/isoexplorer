@@ -1,28 +1,20 @@
-ie_server <- function(isofiles, allow_upload, path, timezone) {
+# app server: instantiates the central file-management module and wires the
+# app-specific modules via `setup_modules(file)`, and handles theme switching.
+# `initial_selection` ("all" / "none" / function(metadata)) sets what is
+# selected on load (passed through to the file server).
+app_server <- function(isofiles, setup_modules, initial_selection = "all") {
   function(input, output, session) {
-    # aggregate isofiles
-    get_aggregated_data <- reactive({
-      req(!is.null(isofiles))
-      req(input$intensity_units)
-      log_info(user_msg = paste("Aggregating isofiles with intensity units", input$intensity_units))
-      out <- isoreader2::ir_aggregate_isofiles(
-        isofiles,
-        intensity_units = input$intensity_units
-      ) |>
-        try_catch_cnds()
-      log_cnds(out)
-      out$result
-    })
-
-    # metadata module
-    metadata <- metadata_server("metadata", get_aggregated_data = get_aggregated_data)
-
-    # plots module
-    plots <- plots_server(
-      "plots",
-      get_aggregated_data = get_aggregated_data,
-      get_selected_metadata = metadata$get_selected_metadata
+    # central file management: splits the isofiles by measurement type, owns the
+    # shared units + per-type selection, and provides metadata + aggregated data
+    # to the other modules. Everything goes through this single instance.
+    file <- ie_file_server(
+      "files",
+      get_isofiles = reactive(isofiles),
+      initial_selection = initial_selection
     )
+
+    # app-specific module wiring
+    setup_modules(file)
 
     # theme switching
     current_theme <- reactiveVal(NA_character_)
@@ -32,11 +24,7 @@ ie_server <- function(isofiles, allow_upload, path, timezone) {
         if (!identical(input$theme, isolate(current_theme()))) {
           current_theme(input$theme)
           log_info(user_msg = paste("Loading theme", input$theme))
-          session$setCurrentTheme(bslib::bs_theme(
-            preset = input$theme,
-            version = 5,
-            "navbar-brand-font-size" = "1.5rem"
-          ))
+          session$setCurrentTheme(app_theme(input$theme))
         }
       })
     })

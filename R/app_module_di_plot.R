@@ -1,15 +1,28 @@
-# Dual Inlet plot UI + server =====
-# thin wrapper over the shared data-plot framework (app_plots.R): plots the
-# aggregated `cycles` with ir_plot_dual_inlet.
-
-di_plot_ui <- function(id) {
+#' Dual inlet plot module
+#'
+#' A plot view for dual inlet cycle data, wired to a [ie_file_server()]: it plots the
+#' selection-filtered aggregated `cycles` with
+#' [isoreader2::ir_plot_dual_inlet()], with unit, species/mass, legend, zoom and
+#' PDF-download controls. Pair `ie_di_plot_ui()` and `ie_di_plot_server()` on one `id`.
+#'
+#' @inheritParams ie_metadata_server
+#' @return `ie_di_plot_ui()` returns a UI element; `ie_di_plot_server()` is called for
+#'   its side effects
+#' @seealso [ie_file_server()], [ie_di_metadata_server()]
+#' @name ie_di_plot
+#' @export
+ie_di_plot_ui <- function(id) {
   data_plot_view_ui(id)
 }
 
-di_plot_server <- function(id, get_isofiles) {
+#' @rdname ie_di_plot
+#' @export
+ie_di_plot_server <- function(id, file) {
   setup_data_plot(
     id,
-    get_isofiles = get_isofiles,
+    get_data = file$get_aggregated_di_data,
+    get_units = file$get_units,
+    set_units = file$set_units,
     dataset_key = "cycles",
     plot_fn = isoreader2::ir_plot_dual_inlet,
     no_data_message = "No dual inlet cycle data available.",
