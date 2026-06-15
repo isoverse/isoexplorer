@@ -33,7 +33,13 @@ app_theme <- function(preset) {
 # titled `bslib::nav_panel`s shown as a centered tabset in the navbar, e.g. the
 # full explorer's per-type tabs). The theme picker, dark-mode toggle and about
 # popover always sit at the right of the navbar.
-app_ui <- function(main = NULL, nav_panels = NULL, timezone, default_theme) {
+app_ui <- function(
+  main = NULL,
+  nav_panels = NULL,
+  timezone,
+  default_theme,
+  selected = NULL
+) {
   app_title <- "isoexplorer"
 
   # the right-aligned navbar controls (theme / dark mode / about)
@@ -86,10 +92,20 @@ app_ui <- function(main = NULL, nav_panels = NULL, timezone, default_theme) {
 
   # navbar body: either a centered tabset of `nav_panels`, or a single untitled
   # panel holding `main`. The spacers center the tabs and push controls right.
+  # The file-upload button sits on the left, next to the title (it only shows
+  # when the file server was given an upload_folder).
+  upload <- list(bslib::nav_item(ie_file_ui("files")))
   body <- if (!is.null(nav_panels)) {
-    c(list(bslib::nav_spacer()), nav_panels, list(bslib::nav_spacer()), controls)
+    c(
+      upload,
+      list(bslib::nav_spacer()),
+      nav_panels,
+      list(bslib::nav_spacer()),
+      controls
+    )
   } else {
     c(
+      upload,
       list(bslib::nav_spacer()),
       controls,
       list(bslib::nav_panel(title = NULL, padding = 0, main))
@@ -102,9 +118,11 @@ app_ui <- function(main = NULL, nav_panels = NULL, timezone, default_theme) {
       bslib::page_navbar,
       c(
         list(
+          id = "ie_navbar",
           title = app_title,
           theme = app_theme(default_theme),
           fillable = TRUE,
+          selected = selected, # initial tab (NULL -> the first one)
           header = tagList(
             use_app_utils(),
             tags$style(HTML(

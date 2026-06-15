@@ -1,8 +1,16 @@
 # app server: instantiates the central file-management module and wires the
 # app-specific modules via `setup_modules(file)`, and handles theme switching.
-# `initial_selection` ("all" / "none" / function(metadata)) sets what is
-# selected on load (passed through to the file server).
-app_server <- function(isofiles, setup_modules, initial_selection = "all") {
+# `initial_selection` ("all" / "none" / function(metadata)) sets what is selected
+# on load; `upload_folder` controls the navbar upload button; `monitoring_folders`
+# lists folders to watch (all passed through to the file server).
+app_server <- function(
+  isofiles,
+  setup_modules,
+  initial_selection = "all",
+  upload_folder = NULL,
+  monitoring_folders = NULL,
+  examples_folder = NULL
+) {
   function(input, output, session) {
     # central file management: splits the isofiles by measurement type, owns the
     # shared units + per-type selection, and provides metadata + aggregated data
@@ -10,7 +18,10 @@ app_server <- function(isofiles, setup_modules, initial_selection = "all") {
     file <- ie_file_server(
       "files",
       get_isofiles = reactive(isofiles),
-      initial_selection = initial_selection
+      initial_selection = initial_selection,
+      upload_folder = upload_folder,
+      monitoring_folders = monitoring_folders,
+      examples_folder = examples_folder
     )
 
     # app-specific module wiring

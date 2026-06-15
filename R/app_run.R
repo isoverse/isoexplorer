@@ -14,7 +14,15 @@
 #' @param default_theme default bslib Bootstrap 5 theme preset
 #' @param nav_panels a list of [bslib::nav_panel()]s shown as a centered navbar
 #'   tabset (use this OR `main`)
+#' @param selected the value/title of the `nav_panels` tab to open initially
+#'   (`NULL` = the first tab)
 #' @param initial_selection initial file selection, see [ie_file_server()]
+#' @param upload_folder upload directory for the navbar upload button; `NULL`
+#'   (the default) means no upload button, see [ie_file_server()]
+#' @param monitoring_folders folders to watch for new isofiles (`NULL` = off),
+#'   see [ie_file_server()]
+#' @param examples_folder directory for the "Load examples" navbar button
+#'   (`NULL` = off), see [ie_file_server()]
 #' @inheritParams shiny::shinyApp
 #' @return a [shiny::shinyApp()] object
 #' @export
@@ -25,7 +33,11 @@ ie_run_app <- function(
   timezone = Sys.timezone(),
   default_theme = app_themes()[1],
   nav_panels = NULL,
+  selected = NULL,
   initial_selection = "all",
+  upload_folder = NULL,
+  monitoring_folders = NULL,
+  examples_folder = NULL,
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url"
@@ -39,12 +51,16 @@ ie_run_app <- function(
     main = main,
     nav_panels = nav_panels,
     timezone = timezone,
-    default_theme = default_theme
+    default_theme = default_theme,
+    selected = selected
   )
   server <- app_server(
     isofiles = isofiles,
     setup_modules = setup_modules,
-    initial_selection = initial_selection
+    initial_selection = initial_selection,
+    upload_folder = upload_folder,
+    monitoring_folders = monitoring_folders,
+    examples_folder = examples_folder
   )
 
   shinyApp(
@@ -82,31 +98,67 @@ ie_type_explorer_ui <- function(meta_id, plot_ui) {
   )
 }
 
+# navbar tab title for the first measurement type (in display order: continuous
+# flow, dual inlet, scans) that has data in `isofiles`; NULL when there is no data
+# (the navbar then opens on the first tab)
+app_first_type_tab <- function(isofiles) {
+  if (is.null(isofiles) || nrow(isofiles) == 0) {
+    return(NULL)
+  }
+  type_tabs <- list(
+    "Continuous Flow" = isoreader2::ir_filter_for_continuous_flow,
+    "Dual Inlet" = isoreader2::ir_filter_for_dual_inlet,
+    "Scans" = isoreader2::ir_filter_for_scans
+  )
+  for (tab in names(type_tabs)) {
+    sub <- type_tabs[[tab]](isofiles)
+    if (!is.null(sub) && nrow(sub) > 0) {
+      return(tab)
+    }
+  }
+  NULL
+}
+
 #' Explore isofiles in the isoexplorer GUI
 #'
-#' Launches a Shiny application for exploring stable isotope data files using
-#' the isoreader2 package, including file/metadata selection and all plot types.
+#' Launches a Shiny app for exploring stable isotope data files read with the
+#' isoreader2 package. `ie_explore_isofiles()` is the full app: one navbar tab per
+#' measurement type (continuous flow / dual inlet / scans), each with a
+#' file-selector sidebar and plot. The `ie_explore_continuous_flow()` /
+#' `ie_explore_dual_inlet()` / `ie_explore_scans()` variants are focused apps
+#' showing a single type, and `ie_explore_metadata()` shows just the selector
+#' table; all share the arguments below.
 #'
-#' @param isofiles optional `ir_isofiles` object to pre-load into the GUI
-#' @param allow_upload whether to allow file uploads in the GUI
+#' @param isofiles the `ir_isofiles` to explore -- optional for
+#'   `ie_explore_isofiles()` (files can also arrive via upload / monitoring),
+#'   required for the focused variants
 #' @param path starting directory path for file browsing (defaults to working directory)
 #' @param timezone the timezone to use for datetime display
 #' @param default_theme the default bslib Bootstrap 5 theme preset
 #' @param initial_selection what is selected (per measurement type) on load:
 #'   `"all"` (default), `"none"`, or a `function(metadata)` that is called with a
 #'   type's metadata tibble and returns the subset of rows to select for it
+#' @param upload_folder upload directory for the navbar upload button; `NULL`
+#'   (the default) means no upload button, a path enables it; see [ie_file_server()]
+#' @param monitoring_folders folders to watch for new isofiles, read and added
+#'   automatically (`NULL` = off); see [ie_file_server()]
+#' @param examples_folder directory the "Load examples" navbar button copies the
+#'   isoreader2 bundled example files into and loads; `"examples"` by default for
+#'   `ie_explore_isofiles()` (`NULL` hides the button)
 #' @inheritParams shiny::shinyApp
 #' @export
 ie_explore_isofiles <- function(
   isofiles = NULL,
-  allow_upload = FALSE,
   path = getwd(),
   timezone = Sys.timezone(),
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = "all",
+  upload_folder = NULL,
+  monitoring_folders = NULL,
+  examples_folder = "examples"
 ) {
   log_info("\n\n========================================================")
   log_info("starting isoexplorer GUI", if (shiny::in_devmode()) " in DEV mode")
@@ -116,8 +168,6 @@ ie_explore_isofiles <- function(
       is.null(isofiles) || inherits(isofiles, "ir_isofiles"),
       "must be an ir_isofiles object or NULL"
     )
-  allow_upload |>
-    check_arg(is_scalar_logical(allow_upload), "must be TRUE or FALSE")
   path |>
     check_arg(
       is_scalar_character(path) && dir.exists(path),
@@ -148,6 +198,9 @@ ie_explore_isofiles <- function(
         ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans"))
       )
     ),
+    # open on the first tab that actually has data (e.g. skip Continuous Flow if
+    # the provided isofiles only have dual inlet / scan data)
+    selected = app_first_type_tab(isofiles),
     setup_modules = function(file) {
       # every selector pushes its selection into the shared file server; every
       # plot pulls its selection-filtered data back out (units are shared too)
@@ -157,23 +210,32 @@ ie_explore_isofiles <- function(
       ie_di_plot_server("di", file)
       ie_scans_metadata_server("scans_meta", file)
       ie_scans_plot_server("scans", file)
+      # after an upload auto-select, switch to that measurement type's tab
+      tab_titles <- c(
+        scans = "Scans",
+        cf = "Continuous Flow",
+        di = "Dual Inlet"
+      )
+      observeEvent(file$get_active_type(), {
+        at <- file$get_active_type()
+        req(at, at$type %in% names(tab_titles))
+        bslib::nav_select("ie_navbar", selected = tab_titles[[at$type]])
+      })
     },
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
+    upload_folder = upload_folder,
+    monitoring_folders = monitoring_folders,
+    examples_folder = examples_folder,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' Explore continuous flow data
-#'
-#' Launches a focused Shiny app showing the continuous flow plot for the provided
-#' isofiles, with a file-selector sidebar.
-#'
-#' @param isofiles an `ir_isofiles` object to plot (required)
-#' @inheritParams ie_explore_isofiles
+#' @describeIn ie_explore_isofiles a focused app showing only the continuous flow
+#'   plot, with its file-selector sidebar (`isofiles` is required here).
 #' @export
 ie_explore_continuous_flow <- function(
   isofiles,
@@ -182,7 +244,9 @@ ie_explore_continuous_flow <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = "all",
+  upload_folder = NULL,
+  monitoring_folders = NULL
 ) {
   log_info("\n\n========================================================")
   log_info(
@@ -210,19 +274,16 @@ ie_explore_continuous_flow <- function(
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
+    upload_folder = upload_folder,
+    monitoring_folders = monitoring_folders,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' Explore dual inlet data
-#'
-#' Launches a focused Shiny app showing the dual inlet plot for the provided
-#' isofiles, with a file-selector sidebar.
-#'
-#' @param isofiles an `ir_isofiles` object to plot (required)
-#' @inheritParams ie_explore_isofiles
+#' @describeIn ie_explore_isofiles a focused app showing only the dual inlet plot,
+#'   with its file-selector sidebar (`isofiles` is required here).
 #' @export
 ie_explore_dual_inlet <- function(
   isofiles,
@@ -231,7 +292,9 @@ ie_explore_dual_inlet <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = "all",
+  upload_folder = NULL,
+  monitoring_folders = NULL
 ) {
   log_info("\n\n========================================================")
   log_info(
@@ -259,19 +322,16 @@ ie_explore_dual_inlet <- function(
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
+    upload_folder = upload_folder,
+    monitoring_folders = monitoring_folders,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' Explore scan data
-#'
-#' Launches a focused Shiny app showing the scans plot for the provided
-#' isofiles, with a file-selector sidebar.
-#'
-#' @param isofiles an `ir_isofiles` object to plot (required)
-#' @inheritParams ie_explore_isofiles
+#' @describeIn ie_explore_isofiles a focused app showing only the scans plot, with
+#'   its file-selector sidebar (`isofiles` is required here).
 #' @export
 ie_explore_scans <- function(
   isofiles,
@@ -280,7 +340,9 @@ ie_explore_scans <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = "all",
+  upload_folder = NULL,
+  monitoring_folders = NULL
 ) {
   log_info("\n\n========================================================")
   log_info(
@@ -310,19 +372,17 @@ ie_explore_scans <- function(
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
+    upload_folder = upload_folder,
+    monitoring_folders = monitoring_folders,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' Explore file metadata
-#'
-#' Launches a focused Shiny app showing only the metadata selector table for the
-#' provided isofiles (useful for testing the selector table).
-#'
-#' @param isofiles an `ir_isofiles` object whose metadata to browse (required)
-#' @inheritParams ie_explore_isofiles
+#' @describeIn ie_explore_isofiles a focused app showing only the metadata
+#'   selector table -- handy for browsing/testing the selector (`isofiles` is
+#'   required here).
 #' @export
 ie_explore_metadata <- function(
   isofiles,

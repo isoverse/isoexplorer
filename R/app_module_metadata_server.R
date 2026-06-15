@@ -17,6 +17,9 @@
 #'   `file$set_selected_scans`)
 #' @param get_selection optional reactive of the current selection, used to
 #'   reflect it in the table on load (e.g. `file$get_scans_selection`)
+#' @param get_select_signal optional reactive carrying file paths the table should
+#'   exclusively select (e.g. `file$get_scans_select_signal`, fired by upload
+#'   auto-select); applied once the table contains those files
 #' @param file the [ie_file_server()] handle (for the typed wrappers)
 #' @return a list with the underlying selector-table handle plus
 #'   `get_selected_row_id` and `get_selected_metadata` reactives
@@ -25,7 +28,8 @@ ie_metadata_server <- function(
   id,
   get_metadata,
   set_selected = NULL,
-  get_selection = NULL
+  get_selection = NULL,
+  get_select_signal = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -63,20 +67,49 @@ ie_metadata_server <- function(
       dom = "fltip"
     )
 
-    # reflect the file server's (initial) selection in the table ONCE, when it
-    # first loads, so the table visually matches what is plotted. select_rows is
-    # keyed on row_id; we match the selection on uidx (file-level, like the data
-    # filtering). After this the table drives the selection (pushed below).
-    if (!is.null(get_selection)) {
-      initial_synced <- reactiveVal(FALSE)
-      observeEvent(metadata_table$is_table_reloaded(), {
-        req(!initial_synced())
-        data <- get_table_data()
-        req(!is.null(data))
-        metadata_table$select_rows(
-          ids = initial_selection_row_ids(data, get_selection())
+    # Reflect a selection in the table, matching what is plotted. Two sources:
+    # the one-time `get_selection` (initial selection) and `get_select_signal`
+    # (file paths an upload wants exclusively selected). A selection can only be
+    # applied once the table has actually RENDERED the target rows: `select_rows`
+    # cleans ids against the table's rendered ids (`get_all_ids()`), so applying
+    # before the DT re-renders with newly-added files would silently drop them
+    # (the cause of "auto-select works the 1st upload but not the 2nd": the table
+    # already existed, so the apply ran against the stale, pre-re-render ids).
+    # We therefore gate on `get_all_ids()` (the current rendered ids) and only
+    # apply once the targets are present; an upload request is held `pending`
+    # until then and takes priority over the initial selection.
+    if (!is.null(get_selection) || !is.null(get_select_signal)) {
+      pending_paths <- reactiveVal(NULL)
+      if (!is.null(get_select_signal)) {
+        observeEvent(
+          get_select_signal(),
+          pending_paths(get_select_signal()),
+          ignoreNULL = TRUE
         )
-        initial_synced(TRUE)
+      }
+      synced <- reactiveVal(FALSE)
+      observe({
+        paths <- pending_paths() # dependency (read first)
+        data <- get_table_data() # dependency: re-run as the metadata grows
+        rendered_ids <- metadata_table$get_all_ids() # halts until table renders
+        req(!is.null(data))
+        isolate({
+          if (length(paths) > 0) {
+            target <- data$row_id[data$file_path %in% paths]
+            # only once the table has rendered these rows (else keep waiting)
+            if (length(target) > 0 && all(target %in% rendered_ids)) {
+              metadata_table$select_rows(ids = target)
+              pending_paths(NULL)
+              synced(TRUE)
+            }
+          } else if (!synced() && !is.null(get_selection)) {
+            target <- initial_selection_row_ids(data, get_selection())
+            if (all(target %in% rendered_ids)) {
+              metadata_table$select_rows(ids = target)
+              synced(TRUE)
+            }
+          }
+        })
       })
     }
 
@@ -123,7 +156,8 @@ ie_scans_metadata_server <- function(id, file) {
     id,
     get_metadata = file$get_scans_metadata,
     set_selected = file$set_selected_scans,
-    get_selection = file$get_scans_selection
+    get_selection = file$get_scans_selection,
+    get_select_signal = file$get_scans_select_signal
   )
 }
 
@@ -134,7 +168,8 @@ ie_cf_metadata_server <- function(id, file) {
     id,
     get_metadata = file$get_cf_metadata,
     set_selected = file$set_selected_cf,
-    get_selection = file$get_cf_selection
+    get_selection = file$get_cf_selection,
+    get_select_signal = file$get_cf_select_signal
   )
 }
 
@@ -145,6 +180,7 @@ ie_di_metadata_server <- function(id, file) {
     id,
     get_metadata = file$get_di_metadata,
     set_selected = file$set_selected_di,
-    get_selection = file$get_di_selection
+    get_selection = file$get_di_selection,
+    get_select_signal = file$get_di_select_signal
   )
 }
