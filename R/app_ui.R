@@ -63,16 +63,16 @@ app_ui <- function(
           icon = icon("circle-info"),
           class = "btn-sm"
         ),
-        title = "isoexplorer",
+        title = "Versions",
         div(
           div(
             a(
-              "isoexplorer",
-              href = "https://github.com/isoverse/isoexplorer",
+              "isoextractor",
+              href = "https://github.com/isoverse/IsofileExtractor",
               target = "_blank"
             ),
             " ",
-            as.character(packageVersion("isoexplorer"))
+            as.character(isoreader2:::get_isoextract_version())
           ),
           div(
             a(
@@ -82,6 +82,15 @@ app_ui <- function(
             ),
             " ",
             as.character(packageVersion("isoreader2"))
+          ),
+          div(
+            a(
+              "isoexplorer",
+              href = "https://github.com/isoverse/isoexplorer",
+              target = "_blank"
+            ),
+            " ",
+            as.character(packageVersion("isoexplorer"))
           )
         ),
         placement = "bottom",

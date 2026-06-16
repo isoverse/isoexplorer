@@ -33,6 +33,11 @@
 #' [isoreader2::ir_find_isofiles()] (including files already present at startup)
 #' are read and added.
 #'
+#' **Getting started.** When `examples_folder` and/or `upload_folder` is set but the
+#' app is launched without data (empty `get_isofiles()`), a prompt is shown once
+#' inviting the user to load the examples and/or upload their own files; an app
+#' launched with data never sees it.
+#'
 #' @param id the module id (namespace)
 #' @param get_isofiles a reactive returning an `ir_isofiles` to seed the app with
 #'   (already read); `reactive(NULL)` is fine when files only arrive via upload /
@@ -158,7 +163,11 @@ ie_file_server <- function(
     }
 
     # seed from / merge in the externally provided isofiles (already read)
-    observeEvent(get_isofiles(), merge_isofiles(get_isofiles()), ignoreNULL = TRUE)
+    observeEvent(
+      get_isofiles(),
+      merge_isofiles(get_isofiles()),
+      ignoreNULL = TRUE
+    )
 
     # per-type isofiles: filter the running set; NULL when a type has no files
     # (aggregating a 0-row isofiles errors)
@@ -182,7 +191,11 @@ ie_file_server <- function(
     # a running ir_aggregated_data for get_subset(): only files whose file_path is
     # new since the last run are aggregated (then c()-ed on); a change in
     # reset_key() (e.g. units) forces a full re-aggregation from scratch.
-    incremental_agg <- function(get_subset, aggregate, reset_key = reactive(NULL)) {
+    incremental_agg <- function(
+      get_subset,
+      aggregate,
+      reset_key = reactive(NULL)
+    ) {
       out <- reactiveVal(NULL)
       state <- list(paths = character(0), key = NULL)
       observe({
@@ -354,7 +367,7 @@ ie_file_server <- function(
       )
     })
 
-    observeEvent(input$load_examples, {
+    do_load_examples <- function() {
       src <- list.files(
         system.file("extdata", package = "isoreader2"),
         full.names = TRUE
@@ -373,17 +386,23 @@ ie_file_server <- function(
           if (n == 1L) "" else "s"
         )
       )
-    })
+    }
+    observeEvent(input$load_examples, do_load_examples())
 
     # FILE UPLOAD (optional) =====
     output$upload_button <- renderUI({
       if (is.null(upload_folder)) {
         return(NULL)
       }
-      actionButton(ns("upload"), "Upload", icon = icon("upload"), class = "btn-sm")
+      actionButton(
+        ns("upload"),
+        "Upload",
+        icon = icon("upload"),
+        class = "btn-sm"
+      )
     })
 
-    observeEvent(input$upload, {
+    show_upload_modal <- function() {
       showModal(modalDialog(
         title = "Upload data files",
         p(
@@ -408,7 +427,8 @@ ie_file_server <- function(
         footer = modalButton("Close"),
         easyClose = TRUE
       ))
-    })
+    }
+    observeEvent(input$upload, show_upload_modal())
 
     observeEvent(input$upload_files, {
       uploads <- input$upload_files
@@ -443,7 +463,11 @@ ie_file_server <- function(
       n_new <- if (is.null(new_iso)) 0L else nrow(new_iso)
       log_info(
         ns = ns,
-        user_msg = sprintf("Uploaded %d file%s", n_new, if (n_new == 1L) "" else "s")
+        user_msg = sprintf(
+          "Uploaded %d file%s",
+          n_new,
+          if (n_new == 1L) "" else "s"
+        )
       )
       # auto-select the uploaded files (per type) + switch to their tab
       if (isTRUE(input$upload_autoselect) && n_new > 0) {
@@ -458,6 +482,63 @@ ie_file_server <- function(
         if (!is.null(first_type)) set_active_type(first_type)
       }
     })
+
+    # STARTUP PROMPT (optional) =====
+    # if examples and/or uploads are enabled but the app was launched without data,
+    # prompt the user (once) to get started. We key off get_isofiles() -- the only
+    # startup seed -- so the check is race-free; an app launched with data skips it.
+    # The buttons reuse the same load / upload actions as the navbar buttons.
+    if (!is.null(examples_folder) || !is.null(upload_folder)) {
+      observeEvent(
+        get_isofiles(),
+        {
+          seed <- get_isofiles()
+          if (is.null(seed) || nrow(seed) == 0) {
+            actions <- list()
+            if (!is.null(examples_folder)) {
+              actions <- c(
+                actions,
+                list(actionButton(
+                  ns("prompt_load_examples"),
+                  "Load examples",
+                  icon = icon("flask")
+                ))
+              )
+            }
+            if (!is.null(upload_folder)) {
+              actions <- c(
+                actions,
+                list(actionButton(
+                  ns("prompt_upload"),
+                  "Upload files",
+                  icon = icon("upload")
+                ))
+              )
+            }
+            intro <- if (!is.null(examples_folder) && !is.null(upload_folder)) {
+              "To get started, load the bundled example files, or upload your own data files."
+            } else if (!is.null(examples_folder)) {
+              "Load the bundled example files to get started."
+            } else {
+              "Upload your own data files to get started."
+            }
+            showModal(modalDialog(
+              title = "No data loaded yet",
+              p(intro),
+              footer = do.call(tagList, c(actions, list(modalButton("Close")))),
+              easyClose = TRUE
+            ))
+          }
+        },
+        ignoreNULL = FALSE,
+        once = TRUE
+      )
+    }
+    observeEvent(input$prompt_load_examples, {
+      removeModal()
+      do_load_examples()
+    })
+    observeEvent(input$prompt_upload, show_upload_modal())
 
     list(
       # shared intensity units (default mV)
@@ -482,7 +563,10 @@ ie_file_server <- function(
       # the type whose tab to activate after an auto-select (list(type, n))
       get_active_type = reactive(active_type()),
       # per-type selection-filtered aggregated data for the plot modules
-      get_aggregated_scans_data = aggregated_for(scans_data_agg, scans_selection$get),
+      get_aggregated_scans_data = aggregated_for(
+        scans_data_agg,
+        scans_selection$get
+      ),
       get_aggregated_cf_data = aggregated_for(cf_data_agg, cf_selection$get),
       get_aggregated_di_data = aggregated_for(di_data_agg, di_selection$get)
     )
