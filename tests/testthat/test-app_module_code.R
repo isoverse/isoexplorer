@@ -29,19 +29,22 @@ test_that("ie_code_server assembles registered generators depth-first with threa
 
     doc <- build_document(quarto = FALSE)
 
-    # heading levels follow the dependency depth
-    expect_equal(doc$headings$level, c(1L, 2L, 3L))
+    # always opens with a Setup chunk, then heading levels follow the tree depth
+    expect_equal(doc$headings$level, c(1L, 1L, 2L, 3L))
     expect_equal(
       doc$headings$text,
-      c("Read data files", "Select scans", "Plot scans")
+      c("Setup", "Read data files", "Select scans", "Plot scans")
     )
+    expect_match(doc$script, "library(isoreader2)", fixed = TRUE)
+    expect_match(doc$script, "library(ggplot2)", fixed = TRUE)
     # output -> input variable threading
     expect_match(doc$script, "scans <- iso_files |> ir_filter_for_scans()", fixed = TRUE)
     expect_match(doc$script, "scans |> ir_plot_scans()", fixed = TRUE)
     # the recorded line really is the heading line
     lines <- strsplit(doc$script, "\n", fixed = TRUE)[[1]]
-    expect_equal(lines[doc$headings$line[[1]]], "# Read data files")
-    expect_equal(lines[doc$headings$line[[3]]], "### Plot scans")
+    expect_equal(lines[doc$headings$line[[1]]], "# Setup")
+    expect_equal(lines[doc$headings$line[[2]]], "# Read data files")
+    expect_equal(lines[doc$headings$line[[4]]], "### Plot scans")
 
     # Quarto view wraps each section in a chunk
     expect_match(build_document(quarto = TRUE)$script, "```{r}", fixed = TRUE)
@@ -66,7 +69,7 @@ test_that("ie_code_server restricts to the active group", {
       expect_match(doc$script, "scans()", fixed = TRUE)
       expect_match(doc$script, "iso_files", fixed = TRUE)
       expect_false(grepl("cf()", doc$script, fixed = TRUE))
-      expect_equal(doc$headings$text, c("Read", "Plot scans"))
+      expect_equal(doc$headings$text, c("Setup", "Read", "Plot scans"))
     }
   )
 })

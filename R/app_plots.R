@@ -484,31 +484,50 @@ setup_data_plot <- function(
       if (isTRUE(input$scientific)) {
         plot_args$scientific <- TRUE
       }
-      # font size + legend position -> the `theme` argument (matches build_data_plot)
+      plot_code <- code_pipe(
+        data_var,
+        filter_part,
+        code_call(plot_fn_name, plot_args)
+      )
+
+      # font size + legend position as a proper ggplot `+ theme(...)` addition
+      # (NOT the plot function's theme= arg); one line per option when several
+      theme_args <- list()
       fs <- input$font_size %||% 16
       lp <- input$legend_position %||% "right"
-      if (!identical(as.numeric(fs), 16) || !identical(lp, "right")) {
-        theme_code <- paste0("ir_default_theme(text_size = ", fs, ")")
-        if (!identical(lp, "right")) {
-          pos <- if (identical(lp, "hide")) "none" else lp
-          theme_code <- paste0(
-            theme_code,
-            " + ggplot2::theme(legend.position = ",
-            code_value(pos),
-            ")"
-          )
+      if (!identical(as.numeric(fs), 16)) {
+        theme_args$text <- code_raw(paste0("element_text(size = ", fs, ")"))
+      }
+      if (!identical(lp, "right")) {
+        theme_args[["legend.position"]] <- if (identical(lp, "hide")) {
+          "none"
+        } else {
+          lp
         }
-        plot_args$theme <- code_raw(theme_code)
+        # a bottom/top legend is laid out vertically (matches build_data_plot)
+        if (lp %in% c("bottom", "top")) {
+          theme_args[["legend.direction"]] <- "vertical"
+        }
+      }
+      if (length(theme_args) > 0) {
+        parts <- vapply(
+          names(theme_args),
+          function(nm) code_arg(nm, theme_args[[nm]]),
+          character(1)
+        )
+        theme_call <- if (length(parts) == 1L) {
+          paste0("theme(", parts, ")")
+        } else {
+          paste0("theme(\n  ", paste(parts, collapse = ",\n  "), "\n)")
+        }
+        plot_code <- paste0(
+          plot_code,
+          " +\n  ",
+          gsub("\n", "\n  ", theme_call, fixed = TRUE)
+        )
       }
 
-      list(
-        code = code_pipe(
-          data_var,
-          filter_part,
-          code_call(plot_fn_name, plot_args)
-        ),
-        output = NULL
-      )
+      list(code = plot_code, output = NULL)
     }
 
     list(get_code = get_code)

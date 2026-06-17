@@ -73,7 +73,7 @@ app_ui <- function(
               target = "_blank"
             ),
             " ",
-            as.character(isoreader2:::get_isoextract_version())
+            as.character(isoreader2:::ir_get_isoextract_version())
           ),
           div(
             a(

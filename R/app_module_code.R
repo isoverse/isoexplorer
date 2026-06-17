@@ -55,8 +55,8 @@ ie_code_server <- function(id, get_active_group = reactive(NULL)) {
       invisible(NULL)
     }
 
-    # Quarto vs plain-code view (toggled in the modal); Quarto is the default
-    quarto_view <- reactiveVal(TRUE)
+    # plain code vs Quarto view (toggled in the modal); plain code is the default
+    quarto_view <- reactiveVal(FALSE)
     # the most recently assembled document (drives the headings nav)
     current_doc <- reactiveVal(NULL)
 
@@ -97,6 +97,17 @@ ie_code_server <- function(id, get_active_group = reactive(NULL)) {
           depth = node$depth,
           heading = node$heading,
           code = res$code %||% ""
+        )
+      }
+      # always open with a setup chunk loading the required libraries
+      if (length(sections) > 0L) {
+        sections <- c(
+          list(list(
+            depth = 1L,
+            heading = "Setup",
+            code = "library(isoreader2)\nlibrary(ggplot2)"
+          )),
+          sections
         )
       }
       render_code_document(sections, quarto = quarto, front_matter = front_matter)
@@ -187,16 +198,29 @@ code_modal <- function(ns, script, quarto) {
       class = "d-flex justify-content-between align-items-center gap-5",
       span("Example code"),
       div(
-        class = "d-flex gap-3 me-3",
-        actionLink(
+        class = "d-flex gap-2 me-3",
+        # copy the editor's current contents (plain or Quarto) to the clipboard,
+        # with brief "Copied!" feedback -- pure client-side, no server round-trip
+        tags$button(
+          type = "button",
+          class = "btn btn-default btn-sm",
+          onclick = sprintf(
+            "navigator.clipboard.writeText(ace.edit('%s').getValue()); var b=this, h=b.innerHTML; b.innerHTML='Copied!'; setTimeout(function(){b.innerHTML=h;}, 1200);",
+            ns("code_editor")
+          ),
+          icon("copy"),
+          " Copy code"
+        ),
+        actionButton(
           ns("toggle_format"),
           if (quarto) "Show plain code" else "Show as Quarto",
-          icon = icon(if (quarto) "code" else "file-lines")
+          icon = icon(if (quarto) "code" else "file-lines"),
+          class = "btn-sm"
         ),
-        downloadLink(
+        downloadButton(
           ns("download_qmd"),
           "Download .qmd",
-          icon = icon("download")
+          class = "btn-sm"
         )
       )
     ),
@@ -258,6 +282,31 @@ code_aggregate_step <- function(get_units, output_var) {
         output_var,
         code_pipe(
           input_var %||% "iso_files",
+          code_call("ir_aggregate_isofiles", list(intensity_units = get_units()))
+        )
+      ),
+      output = output_var
+    )
+  }
+}
+
+# get_code generator for a focused app's root step: there is no folder read --
+# the user passed an in-memory ir_isofiles object (`obj_name` is what they called
+# it), so aggregate it directly into `output_var`. `filter_fn` is the
+# ir_filter_for_<type> name to insert first, or NULL to omit it (the caller passes
+# NULL when the object already holds only the focused type -- no filter needed).
+code_object_aggregate_step <- function(obj_name, filter_fn, get_units, output_var) {
+  force(obj_name)
+  force(filter_fn)
+  force(get_units)
+  force(output_var)
+  function(input_var = NULL) {
+    list(
+      code = code_assign(
+        output_var,
+        code_pipe(
+          obj_name,
+          if (!is.null(filter_fn)) code_call(filter_fn) else NULL,
           code_call("ir_aggregate_isofiles", list(intensity_units = get_units()))
         )
       ),

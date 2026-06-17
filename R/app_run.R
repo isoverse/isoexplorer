@@ -78,7 +78,7 @@ ie_run_app <- function(
 #'
 #' Convenience UI combining a left file-selector sidebar (a [ie_metadata_ui()]) with
 #' a plot to its right -- the building block each focused explorer and each tab of
-#' [ie_explore_isofiles()] uses. Wire the matching `*_metadata_server()` (on
+#' [ie_start_isofiles_server()] uses. Wire the matching `*_metadata_server()` (on
 #' `meta_id`) and `*_plot_server()` in your server function.
 #'
 #' @param meta_id the id for the [ie_metadata_ui()] / `*_metadata_server()` pair
@@ -100,58 +100,38 @@ ie_type_explorer_ui <- function(meta_id, plot_ui) {
   )
 }
 
-# navbar tab title for the first measurement type (in display order: continuous
-# flow, dual inlet, scans) that has data in `isofiles`; NULL when there is no data
-# (the navbar then opens on the first tab)
-app_first_type_tab <- function(isofiles) {
-  if (is.null(isofiles) || nrow(isofiles) == 0) {
-    return(NULL)
-  }
-  type_tabs <- list(
-    "Continuous Flow" = isoreader2::ir_filter_for_continuous_flow,
-    "Dual Inlet" = isoreader2::ir_filter_for_dual_inlet,
-    "Scans" = isoreader2::ir_filter_for_scans
-  )
-  for (tab in names(type_tabs)) {
-    sub <- type_tabs[[tab]](isofiles)
-    if (!is.null(sub) && nrow(sub) > 0) {
-      return(tab)
-    }
-  }
-  NULL
+# the ir_filter_for_<type> name to put in a focused app's generated code, or NULL
+# when `isofiles` already holds only that type (the filter would be a no-op then).
+# `filter_fn` is the actual function (to test), `filter_fn_name` its name (for code)
+app_focused_filter <- function(isofiles, filter_fn, filter_fn_name) {
+  if (nrow(filter_fn(isofiles)) < nrow(isofiles)) filter_fn_name else NULL
 }
 
-#' Explore isofiles in the isoexplorer GUI
+#' Start an isofiles server in the isoexplorer GUI
 #'
-#' Launches a Shiny app for exploring stable isotope data files read with the
-#' isoreader2 package. `ie_explore_isofiles()` is the full app: one navbar tab per
-#' measurement type (continuous flow / dual inlet / scans), each with a
-#' file-selector sidebar and plot. The `ie_explore_continuous_flow()` /
-#' `ie_explore_dual_inlet()` / `ie_explore_scans()` variants are focused apps
-#' showing a single type, and `ie_explore_metadata()` shows just the selector
-#' table; all share the arguments below.
+#' Launches the full isoexplorer Shiny app: one navbar tab per measurement type
+#' (continuous flow / dual inlet / scans), each with a file-selector sidebar and
+#' plot. Unlike the focused [ie_explore_continuous_flow()] explorers, this app does
+#' NOT take an `ir_isofiles` object -- data arrives at runtime via the navbar
+#' **Upload** button, any watched `monitoring_folders`, and/or the **Load
+#' examples** button (a "get started" prompt is shown until something is loaded).
 #'
-#' @param isofiles the `ir_isofiles` to explore -- optional for
-#'   `ie_explore_isofiles()` (files can also arrive via upload / monitoring),
-#'   required for the focused variants
-#' @param path starting directory path for file browsing (defaults to working directory)
 #' @param timezone the timezone to use for datetime display
 #' @param default_theme the default bslib Bootstrap 5 theme preset
-#' @param initial_selection what is selected (per measurement type) on load:
-#'   `"all"` (default), `"none"`, or a `function(metadata)` that is called with a
-#'   type's metadata tibble and returns the subset of rows to select for it
+#' @param initial_selection what is selected (per measurement type) once files
+#'   load: `"all"` (default), `"none"`, or a `function(metadata)` that is called
+#'   with a type's metadata tibble and returns the subset of rows to select
 #' @param upload_folder upload directory for the navbar upload button; `NULL`
 #'   (the default) means no upload button, a path enables it; see [ie_file_server()]
 #' @param monitoring_folders folders to watch for new isofiles, read and added
 #'   automatically (`NULL` = off); see [ie_file_server()]
 #' @param examples_folder directory the "Load examples" navbar button copies the
-#'   isoreader2 bundled example files into and loads; `"examples"` by default for
-#'   `ie_explore_isofiles()` (`NULL` hides the button)
+#'   isoreader2 bundled example files into and loads; `"examples"` by default
+#'   (`NULL` hides the button)
 #' @inheritParams shiny::shinyApp
+#' @return a [shiny::shinyApp()] object
 #' @export
-ie_explore_isofiles <- function(
-  isofiles = NULL,
-  path = getwd(),
+ie_start_isofiles_server <- function(
   timezone = Sys.timezone(),
   options = list(),
   uiPattern = "/",
@@ -163,18 +143,10 @@ ie_explore_isofiles <- function(
   examples_folder = "examples"
 ) {
   log_info("\n\n========================================================")
-  log_info("starting isoexplorer GUI", if (shiny::in_devmode()) " in DEV mode")
-
-  isofiles |>
-    check_arg(
-      is.null(isofiles) || inherits(isofiles, "ir_isofiles"),
-      "must be an ir_isofiles object or NULL"
-    )
-  path |>
-    check_arg(
-      is_scalar_character(path) && dir.exists(path),
-      "must be a path to an existing directory"
-    )
+  log_info(
+    "starting isoexplorer server GUI",
+    if (shiny::in_devmode()) " in DEV mode"
+  )
   timezone |>
     check_arg(
       is_scalar_character(timezone) && timezone %in% base::OlsonNames(),
@@ -183,9 +155,9 @@ ie_explore_isofiles <- function(
   default_theme <- arg_match(default_theme)
 
   # one centered navbar tab per measurement type, each the type's file-selector
-  # sidebar + plot (the same content as the focused example apps)
+  # sidebar + plot (the same content as the focused explorers)
   ie_run_app(
-    isofiles = isofiles,
+    isofiles = NULL,
     nav_panels = list(
       bslib::nav_panel(
         "Continuous Flow",
@@ -200,17 +172,13 @@ ie_explore_isofiles <- function(
         ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans"))
       )
     ),
-    # open on the first tab that actually has data (e.g. skip Continuous Flow if
-    # the provided isofiles only have dual inlet / scan data)
-    selected = app_first_type_tab(isofiles),
+    # no data at startup -> open on the first tab (uploads switch tabs as needed)
+    selected = NULL,
     setup_modules = function(file, code) {
-      # every selector pushes its selection into the shared file server; every
-      # plot pulls its selection-filtered data back out (units are shared too).
-      # Each module also registers its get_code() with the code server, forming
-      # the dependency tree isofiles -> <type>_select -> <type>_plot.
       # each type registers its own read -> aggregate -> plot code chain, grouped
-      # by tab title so the viewer shows only the active tab's code (selectors
-      # still drive which files/analyses the plot step filters to)
+      # by tab title so the viewer shows only the active tab's code (the read step
+      # finds files in the "data" folder; selectors drive which files/analyses the
+      # plot step filters to)
       ie_cf_metadata_server("cf_meta", file)
       code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow"), group = "Continuous Flow")
       code$register("cf_agg", "Aggregate data files", code_aggregate_step(file$get_units, "cf_data"), depends_on = "cf_read", group = "Continuous Flow")
@@ -252,8 +220,23 @@ ie_explore_isofiles <- function(
   )
 }
 
-#' @describeIn ie_explore_isofiles a focused app showing only the continuous flow
-#'   plot, with its file-selector sidebar (`isofiles` is required here).
+#' Explore an ir_isofiles object by measurement type
+#'
+#' Focused apps for exploring an already-read `ir_isofiles` object one measurement
+#' type at a time: `ie_explore_continuous_flow()` / `ie_explore_dual_inlet()` /
+#' `ie_explore_scans()` each show that type's file-selector sidebar + plot, and
+#' `ie_explore_metadata()` shows just the selector table. The generated example
+#' code (navbar **Show code**) refers to the object by the name you passed in.
+#' These take a fixed object only -- for upload / folder monitoring / load-examples
+#' use [ie_start_isofiles_server()].
+#'
+#' @param isofiles the `ir_isofiles` object to explore (required)
+#' @param timezone the timezone to use for datetime display
+#' @param default_theme the default bslib Bootstrap 5 theme preset
+#' @param initial_selection what is selected on load: `"all"` (default), `"none"`,
+#'   or a `function(metadata)` returning the subset of rows to select
+#' @inheritParams shiny::shinyApp
+#' @return a [shiny::shinyApp()] object
 #' @export
 ie_explore_continuous_flow <- function(
   isofiles,
@@ -262,10 +245,9 @@ ie_explore_continuous_flow <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all",
-  upload_folder = NULL,
-  monitoring_folders = NULL
+  initial_selection = "all"
 ) {
+  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer continuous flow GUI",
@@ -282,29 +264,31 @@ ie_explore_continuous_flow <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
+  # only filter-to-type in the generated code when the object is actually mixed
+  cf_filter <- app_focused_filter(
+    isofiles,
+    isoreader2::ir_filter_for_continuous_flow,
+    "ir_filter_for_continuous_flow"
+  )
   ie_run_app(
     isofiles = isofiles,
     main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
     setup_modules = function(file, code) {
       ie_cf_metadata_server("cf_meta", file)
-      code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow"))
-      code$register("cf_agg", "Aggregate data files", code_aggregate_step(file$get_units, "cf_data"), depends_on = "cf_read")
+      code$register("cf_agg", "Aggregate data files", code_object_aggregate_step(obj_name, cf_filter, file$get_units, "cf_data"))
       cf_plot <- ie_cf_plot_server("cf", file)
       code$register("cf_plot", "Plot continuous flow", cf_plot$get_code, depends_on = "cf_agg")
     },
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
-    upload_folder = upload_folder,
-    monitoring_folders = monitoring_folders,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' @describeIn ie_explore_isofiles a focused app showing only the dual inlet plot,
-#'   with its file-selector sidebar (`isofiles` is required here).
+#' @describeIn ie_explore_continuous_flow focused app for the dual inlet plot.
 #' @export
 ie_explore_dual_inlet <- function(
   isofiles,
@@ -313,10 +297,9 @@ ie_explore_dual_inlet <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all",
-  upload_folder = NULL,
-  monitoring_folders = NULL
+  initial_selection = "all"
 ) {
+  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer dual inlet GUI",
@@ -333,29 +316,31 @@ ie_explore_dual_inlet <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
+  # only filter-to-type in the generated code when the object is actually mixed
+  di_filter <- app_focused_filter(
+    isofiles,
+    isoreader2::ir_filter_for_dual_inlet,
+    "ir_filter_for_dual_inlet"
+  )
   ie_run_app(
     isofiles = isofiles,
     main = ie_type_explorer_ui("di_meta", ie_di_plot_ui("di")),
     setup_modules = function(file, code) {
       ie_di_metadata_server("di_meta", file)
-      code$register("di_read", "Read data files", code_read_step("ir_find_dual_inlet"))
-      code$register("di_agg", "Aggregate data files", code_aggregate_step(file$get_units, "di_data"), depends_on = "di_read")
+      code$register("di_agg", "Aggregate data files", code_object_aggregate_step(obj_name, di_filter, file$get_units, "di_data"))
       di_plot <- ie_di_plot_server("di", file)
       code$register("di_plot", "Plot dual inlet", di_plot$get_code, depends_on = "di_agg")
     },
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
-    upload_folder = upload_folder,
-    monitoring_folders = monitoring_folders,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' @describeIn ie_explore_isofiles a focused app showing only the scans plot, with
-#'   its file-selector sidebar (`isofiles` is required here).
+#' @describeIn ie_explore_continuous_flow focused app for the scans plot.
 #' @export
 ie_explore_scans <- function(
   isofiles,
@@ -364,10 +349,9 @@ ie_explore_scans <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all",
-  upload_folder = NULL,
-  monitoring_folders = NULL
+  initial_selection = "all"
 ) {
+  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer scans GUI",
@@ -384,6 +368,12 @@ ie_explore_scans <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
+  # only filter-to-type in the generated code when the object is actually mixed
+  scans_filter <- app_focused_filter(
+    isofiles,
+    isoreader2::ir_filter_for_scans,
+    "ir_filter_for_scans"
+  )
   ie_run_app(
     isofiles = isofiles,
     # the selector pushes its selection into the file server; the plot pulls the
@@ -391,25 +381,21 @@ ie_explore_scans <- function(
     main = ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans")),
     setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
-      code$register("scans_read", "Read data files", code_read_step("ir_find_scans"))
-      code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read")
+      code$register("scans_agg", "Aggregate data files", code_object_aggregate_step(obj_name, scans_filter, file$get_units, "scans_data"))
       scans_plot <- ie_scans_plot_server("scans", file)
       code$register("scans_plot", "Plot scans", scans_plot$get_code, depends_on = "scans_agg")
     },
     timezone = timezone,
     default_theme = default_theme,
     initial_selection = initial_selection,
-    upload_folder = upload_folder,
-    monitoring_folders = monitoring_folders,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
   )
 }
 
-#' @describeIn ie_explore_isofiles a focused app showing only the metadata
-#'   selector table -- handy for browsing/testing the selector (`isofiles` is
-#'   required here).
+#' @describeIn ie_explore_continuous_flow focused app showing just the scans
+#'   metadata selector table (handy for browsing/testing the selector).
 #' @export
 ie_explore_metadata <- function(
   isofiles,
@@ -419,6 +405,7 @@ ie_explore_metadata <- function(
   enableBookmarking = "url",
   default_theme = app_themes()
 ) {
+  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer metadata GUI",
@@ -435,13 +422,18 @@ ie_explore_metadata <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
+  # only filter-to-type in the generated code when the object is actually mixed
+  scans_filter <- app_focused_filter(
+    isofiles,
+    isoreader2::ir_filter_for_scans,
+    "ir_filter_for_scans"
+  )
   ie_run_app(
     isofiles = isofiles,
     main = ie_metadata_ui("scans_meta"),
     setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
-      code$register("scans_read", "Read data files", code_read_step("ir_find_scans"))
-      code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read")
+      code$register("scans_agg", "Aggregate data files", code_object_aggregate_step(obj_name, scans_filter, file$get_units, "scans_data"))
     },
     timezone = timezone,
     default_theme = default_theme,

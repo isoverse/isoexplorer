@@ -104,7 +104,10 @@ species_mass_groups <- function(dataset) {
     m$species <- NA_character_
   }
   m |>
-    dplyr::summarise(masses = list(as.character(.data$mass)), .by = "species") |>
+    dplyr::summarise(
+      masses = list(as.character(.data$mass)),
+      .by = "species"
+    ) |>
     dplyr::arrange(.data$species)
 }
 
@@ -123,13 +126,17 @@ filter_by_selected_masses <- function(df, selected_items) {
   )
 }
 
-# apply (or hide) the legend on a ggplot; NULL passes through unchanged
+# apply (or hide) the legend on a ggplot; NULL passes through unchanged. A
+# bottom/top legend is laid out vertically (legend.direction = "vertical").
 apply_legend_position <- function(plot, position = "right") {
   if (is.null(plot)) {
     return(plot)
   }
   if (identical(position, "hide")) {
     plot + ggplot2::theme(legend.position = "none")
+  } else if (position %in% c("bottom", "top")) {
+    plot +
+      ggplot2::theme(legend.position = position, legend.direction = "vertical")
   } else {
     plot + ggplot2::theme(legend.position = position)
   }
@@ -170,8 +177,8 @@ build_data_plot <- function(
   plot <- plot_fn(
     agg_data,
     scientific = isTRUE(scientific),
-    theme = isoreader2::ir_default_theme(text_size = font_size),
     ...
-  )
+  ) +
+    ggplot2::theme(text = ggplot2::element_text(size = font_size))
   apply_legend_position(plot, legend_position)
 }
