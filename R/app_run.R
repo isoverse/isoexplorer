@@ -180,19 +180,19 @@ ie_start_isofiles_server <- function(
       # finds files in the "data" folder; selectors drive which files/analyses the
       # plot step filters to)
       ie_cf_metadata_server("cf_meta", file)
-      code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow"), group = "Continuous Flow")
+      code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow", file$get_examples_loaded, file$get_uploads_loaded, examples_folder, upload_folder), group = "Continuous Flow")
       code$register("cf_agg", "Aggregate data files", code_aggregate_step(file$get_units, "cf_data"), depends_on = "cf_read", group = "Continuous Flow")
       cf_plot <- ie_cf_plot_server("cf", file)
       code$register("cf_plot", "Plot continuous flow", cf_plot$get_code, depends_on = "cf_agg", group = "Continuous Flow")
 
       ie_di_metadata_server("di_meta", file)
-      code$register("di_read", "Read data files", code_read_step("ir_find_dual_inlet"), group = "Dual Inlet")
+      code$register("di_read", "Read data files", code_read_step("ir_find_dual_inlet", file$get_examples_loaded, file$get_uploads_loaded, examples_folder, upload_folder), group = "Dual Inlet")
       code$register("di_agg", "Aggregate data files", code_aggregate_step(file$get_units, "di_data"), depends_on = "di_read", group = "Dual Inlet")
       di_plot <- ie_di_plot_server("di", file)
       code$register("di_plot", "Plot dual inlet", di_plot$get_code, depends_on = "di_agg", group = "Dual Inlet")
 
       ie_scans_metadata_server("scans_meta", file)
-      code$register("scans_read", "Read data files", code_read_step("ir_find_scans"), group = "Scans")
+      code$register("scans_read", "Read data files", code_read_step("ir_find_scans", file$get_examples_loaded, file$get_uploads_loaded, examples_folder, upload_folder), group = "Scans")
       code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read", group = "Scans")
       scans_plot <- ie_scans_plot_server("scans", file)
       code$register("scans_plot", "Plot scans", scans_plot$get_code, depends_on = "scans_agg", group = "Scans")

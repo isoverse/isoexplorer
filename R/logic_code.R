@@ -168,6 +168,18 @@ code_assign <- function(var, rhs) {
   paste0(var, " <- ", rhs)
 }
 
+# the bare-column code for a plot aesthetic (facet/color/linetype): the column
+# name (backticked when not a syntactic name), wrapped in factor() when it is one
+# of `factor_cols` (numeric metadata columns used as a discrete aesthetic).
+code_aes_value <- function(col, factor_cols = character(0)) {
+  bare <- if (grepl("^[a-zA-Z.][a-zA-Z0-9._]*$", col)) {
+    col
+  } else {
+    paste0("`", col, "`")
+  }
+  if (col %in% factor_cols) paste0("factor(", bare, ")") else bare
+}
+
 # Build an ir_filter_metadata() condition for the currently selected analyses.
 #
 # `selected` is the selected metadata rows (file_name + analysis columns), `all`

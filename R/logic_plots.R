@@ -126,6 +126,40 @@ filter_by_selected_masses <- function(df, selected_items) {
   )
 }
 
+# decide the ir_plot_*() species/mass argument for the current selection (pure):
+# `selected` is the selected (species, mass) rows, `groups` is species_mass_groups()
+# (one row per species with a list-column `masses`). Returns list(species=) when
+# whole species were dropped but every kept species keeps all its masses,
+# list(mass=) when masses were narrowed within a species, or list() when
+# everything (or nothing) is selected -- so the plot/code can splice it in.
+select_species_or_mass <- function(selected, groups) {
+  if (is.null(selected) || nrow(selected) == 0L || is.null(groups)) {
+    return(list())
+  }
+  all_species <- as.character(groups$species)
+  sel_species <- unique(as.character(selected$species))
+  species_level <- all(vapply(
+    sel_species,
+    function(sp) {
+      i <- match(sp, groups$species)
+      setequal(
+        as.character(selected$mass[selected$species == sp]),
+        as.character(groups$masses[[i]])
+      )
+    },
+    logical(1)
+  ))
+  all_masses <- unique(as.character(unlist(groups$masses)))
+  chosen_masses <- unique(as.character(selected$mass))
+  if (species_level && !setequal(sel_species, all_species)) {
+    list(species = sort(sel_species))
+  } else if (!setequal(chosen_masses, all_masses)) {
+    list(mass = sort(chosen_masses))
+  } else {
+    list()
+  }
+}
+
 # apply (or hide) the legend on a ggplot; NULL passes through unchanged. A
 # bottom/top legend is laid out vertically (legend.direction = "vertical").
 apply_legend_position <- function(plot, position = "right") {
@@ -145,7 +179,10 @@ apply_legend_position <- function(plot, position = "right") {
 # shared cf/di/scans plot pipeline: from metadata-filtered agg_data, restrict the
 # `dataset_key` table to the selected masses, plot it with `plot_fn`, and set the
 # legend. Returns NULL when there is nothing to plot (caller substitutes an empty
-# plot). Plot-specific extras (e.g. time_window, scan_type) pass through via `...`.
+# plot). `aes_args` is a named list of QUOSURES for the tidy-eval aesthetics
+# (facet/color/linetype) -- they are injected so the columns are evaluated as
+# variables, not strings. Other plot-specific extras (time_window, scan_type,
+# scales, ...) pass through via `...` as plain values.
 build_data_plot <- function(
   agg_data,
   dataset_key,
@@ -154,6 +191,7 @@ build_data_plot <- function(
   font_size = 16,
   scientific = FALSE,
   legend_position = "right",
+  aes_args = list(),
   ...
 ) {
   if (is.null(agg_data)) {
@@ -174,11 +212,13 @@ build_data_plot <- function(
     return(NULL)
   }
 
-  plot <- plot_fn(
-    agg_data,
-    scientific = isTRUE(scientific),
-    ...
-  ) +
+  # inject the aesthetic quosures alongside the plain-value args
+  call_args <- c(
+    list(agg_data, scientific = isTRUE(scientific)),
+    aes_args,
+    list(...)
+  )
+  plot <- rlang::inject(plot_fn(!!!call_args)) +
     ggplot2::theme(text = ggplot2::element_text(size = font_size))
   apply_legend_position(plot, legend_position)
 }

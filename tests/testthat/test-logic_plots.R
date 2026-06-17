@@ -180,3 +180,24 @@ test_that("build_data_plot filters by masses and forwards args to plot_fn", {
   expect_false(captured$scientific)
   expect_equal(captured$extra$time_window, c(0, 10))
 })
+
+test_that("select_species_or_mass chooses species= vs mass= vs nothing", {
+  groups <- tibble::tibble(
+    species = c("A", "B", "C"),
+    masses = list(c("1", "2"), "1", c("1", "2"))
+  )
+  all_sel <- tibble::tibble(
+    species = c("A", "A", "B", "C", "C"),
+    mass = c("1", "2", "1", "1", "2")
+  )
+  # everything selected -> no argument
+  expect_equal(select_species_or_mass(all_sel, groups), list())
+  # whole species C dropped, A and B fully kept -> species=
+  drop_c <- tibble::tibble(species = c("A", "A", "B"), mass = c("1", "2", "1"))
+  expect_equal(select_species_or_mass(drop_c, groups), list(species = c("A", "B")))
+  # A narrowed to just mass 1 (partial) -> mass=
+  partial <- tibble::tibble(species = c("A", "B"), mass = c("1", "1"))
+  expect_equal(select_species_or_mass(partial, groups), list(mass = "1"))
+  # nothing selected -> no argument
+  expect_equal(select_species_or_mass(all_sel[0, ], groups), list())
+})

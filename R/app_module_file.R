@@ -368,14 +368,8 @@ ie_file_server <- function(
     })
 
     do_load_examples <- function() {
-      src <- list.files(
-        system.file("extdata", package = "isoreader2"),
-        full.names = TRUE
-      )
-      if (!dir.exists(examples_folder)) {
-        dir.create(examples_folder, recursive = TRUE)
-      }
-      file.copy(src, examples_folder, overwrite = TRUE)
+      # copy the isoreader2 bundled examples into examples_folder, then read them
+      isoreader2::ir_copy_examples(examples_folder)
       new_iso <- add_paths(isoreader2::ir_find_isofiles(examples_folder))
       n <- if (is.null(new_iso)) 0L else nrow(new_iso)
       log_info(
@@ -540,7 +534,28 @@ ie_file_server <- function(
     })
     observeEvent(input$prompt_upload, show_upload_modal())
 
+    # whether any loaded file came from the examples / upload folder -- the code
+    # server uses these to choose the read folders ("examples" + ir_copy_examples,
+    # and/or "data") in the generated read step
+    get_examples_loaded <- reactive({
+      m <- managed()
+      if (is.null(m) || nrow(m) == 0) {
+        return(FALSE)
+      }
+      any(app_under_folder(m$file_path, examples_folder))
+    })
+    get_uploads_loaded <- reactive({
+      m <- managed()
+      if (is.null(m) || nrow(m) == 0) {
+        return(FALSE)
+      }
+      any(app_under_folder(m$file_path, upload_folder))
+    })
+
     list(
+      # whether any loaded file came from the examples / upload folder
+      get_examples_loaded = get_examples_loaded,
+      get_uploads_loaded = get_uploads_loaded,
       # shared intensity units (default mV)
       get_units = get_units,
       set_units = set_units,
@@ -591,6 +606,17 @@ app_isofile_types <- function() {
     eval(formals(isoreader2::ir_find_isofiles)$types),
     error = function(e) character(0)
   )
+}
+
+# which of `paths` live inside `folder` (a logical vector). Used to tell where a
+# loaded file came from (examples vs upload folder) for the generated read code.
+app_under_folder <- function(paths, folder) {
+  if (is.null(folder) || length(paths) == 0 || !dir.exists(folder)) {
+    return(logical(length(paths)))
+  }
+  nf <- normalizePath(folder, winslash = "/", mustWork = FALSE)
+  np <- normalizePath(paths, winslash = "/", mustWork = FALSE)
+  startsWith(np, paste0(nf, "/"))
 }
 
 # accepted upload extensions for the file picker: .zip, every type isoreader2 can

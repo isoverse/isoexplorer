@@ -119,6 +119,16 @@ test_that("code_raw is emitted verbatim (not quoted)", {
   )
 })
 
+test_that("code_aes_value handles columns, factors, and non-syntactic names", {
+  expect_equal(code_aes_value("species"), "species")
+  expect_equal(code_aes_value("analysis", c("analysis", "uidx")), "factor(analysis)")
+  expect_equal(code_aes_value("Peak Center"), "`Peak Center`")
+  expect_equal(
+    code_aes_value("Peak Center", "Peak Center"),
+    "factor(`Peak Center`)"
+  )
+})
+
 test_that("code_metadata_filter builds per-file conditions", {
   all <- tibble::tibble(
     file_name = c("a", "a", "b", "b", "c"),

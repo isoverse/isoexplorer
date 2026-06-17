@@ -12,7 +12,16 @@
 #' @name ie_cf_plot
 #' @export
 ie_cf_plot_ui <- function(id) {
-  data_plot_view_ui(id)
+  ns <- NS(id)
+  data_plot_view_ui(
+    id,
+    # short_time_labels is a continuous-flow-only ir_plot_continuous_flow() option
+    extra_options = checkboxInput(
+      ns("short_time_labels"),
+      "Short time labels",
+      value = FALSE
+    )
+  )
 }
 
 #' @rdname ie_cf_plot

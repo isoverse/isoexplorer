@@ -6,21 +6,34 @@
 
 # UI ----
 
-# the right-hand "Plot Options" sidebar
-plot_options_sidebar <- function(ns, extra_top = NULL) {
+# the right-hand "Plot Options" sidebar. `extra_options` is module-specific extra
+# UI (e.g. the continuous-flow `short_time_labels` checkbox). The facet/color/
+# linetype dropdowns are rendered server-side (their choices include the data's
+# metadata columns) via the `aes_options` placeholder.
+plot_options_sidebar <- function(ns, extra_top = NULL, extra_options = NULL) {
   bslib::sidebar(
     position = "right",
-    width = "160",
+    width = "190",
     title = "Plot Options",
     extra_top,
+    uiOutput(ns("aes_options")),
+    selectInput(
+      ns("scales"),
+      "Scales:",
+      choices = c("free", "fixed", "free_x", "free_y"),
+      selected = "free"
+    ),
+    checkboxInput(ns("scientific"), "Scientific notation", value = FALSE),
+    checkboxInput(ns("drop_unused_levels"), "Drop unused levels", value = FALSE),
+    extra_options,
+    # styling options last
     selectInput(
       ns("legend_position"),
       "Legend:",
       choices = c("right", "bottom", "top", "left", "hide"),
       selected = "right"
     ),
-    numericInput(ns("font_size"), "Font size:", value = 16, min = 6, step = 1),
-    checkboxInput(ns("scientific"), "Scientific notation", value = FALSE)
+    numericInput(ns("font_size"), "Font size:", value = 16, min = 6, step = 1)
   )
 }
 
@@ -76,7 +89,7 @@ zoom_controls <- function(ns) {
 # the shared plot view: units (+ optional `extra_left`, e.g. the scans scan-type
 # popover) and species popovers on the left, zoom centered, download on the
 # right, plot output below, and the plot-options sidebar on the right.
-data_plot_view_ui <- function(id, extra_left = NULL) {
+data_plot_view_ui <- function(id, extra_left = NULL, extra_options = NULL) {
   ns <- NS(id)
   # the whole card (controls + options sidebar + plot) can go fullscreen
   bslib::card(
@@ -84,7 +97,7 @@ data_plot_view_ui <- function(id, extra_left = NULL) {
     min_height = 400,
     bslib::layout_sidebar(
       fill = TRUE,
-      sidebar = plot_options_sidebar(ns),
+      sidebar = plot_options_sidebar(ns, extra_options = extra_options),
       # controls row (units/species left, zoom centered, download right)
       div(
         class = "d-flex align-items-center gap-2 mb-2",
@@ -181,6 +194,34 @@ setup_data_plot <- function(
     }
     get_extra_plot_args <- extra$plot_args %||% reactive(list())
     filter_dataset <- extra$filter_dataset
+
+    # facet / color / linetype aesthetic dropdowns. Choices are species/mass/trace
+    # plus the data's metadata columns; rendered server-side (data-dependent) and
+    # only once data is loaded so the function defaults (facet=file_name,
+    # color=trace, linetype=none) are valid choices. Numeric and date/time metadata
+    # columns are factor()-wrapped when used as a discrete aesthetic (see
+    # aes_factor_cols + the plot/code below).
+    aes_factor_cols <- reactive({
+      md <- get_data()$metadata
+      if (is.null(md)) {
+        return(character(0))
+      }
+      names(md)[vapply(
+        md,
+        function(x) is.numeric(x) || inherits(x, c("POSIXt", "Date")),
+        logical(1)
+      )]
+    })
+    output$aes_options <- renderUI({
+      md <- get_data()$metadata
+      req(md)
+      ch <- c("species", "mass", "trace", setdiff(names(md), "file_path"))
+      tagList(
+        selectInput(ns("facet"), "Facet by:", choices = ch, selected = isolate(input$facet) %||% "file_name"),
+        selectInput(ns("color"), "Color by:", choices = ch, selected = isolate(input$color) %||% "trace"),
+        selectInput(ns("linetype"), "Linetype by:", choices = c("(none)", ch), selected = isolate(input$linetype) %||% "(none)")
+      )
+    })
 
     # species -> available masses, de-duplicated so a units change (which
     # re-aggregates but keeps the same species/masses) doesn't rebuild the
@@ -396,6 +437,35 @@ setup_data_plot <- function(
       if (!is.null(zoom_arg) && !is.null(window)) {
         extra[[zoom_arg]] <- window
       }
+      # plot-function passthrough option (forwarded to plot_fn via build_data_plot)
+      if (isTRUE(input$drop_unused_levels)) {
+        extra$drop_unused_levels <- TRUE
+      }
+      # scales / short_time_labels are plain-value args (pass via extra/...)
+      extra$scales <- input$scales %||% "free"
+      if (isTRUE(input$short_time_labels)) {
+        extra$short_time_labels <- TRUE
+      }
+      # facet / color / linetype are tidy-eval aesthetics -> build them as quosures
+      # (symbols, factor()-wrapped for numeric columns) so build_data_plot can
+      # inject them and the columns are evaluated as variables, not strings
+      fcols <- aes_factor_cols()
+      aes_quo <- function(sel, default) {
+        v <- sel %||% default
+        if (is.null(v) || identical(v, "(none)")) {
+          return(NULL)
+        }
+        s <- rlang::sym(v)
+        if (v %in% fcols) rlang::quo(factor(!!s)) else rlang::quo(!!s)
+      }
+      aes_args <- list(
+        facet = aes_quo(input$facet, "file_name"),
+        color = aes_quo(input$color, "trace")
+      )
+      linetype_quo <- aes_quo(input$linetype, NULL)
+      if (!is.null(linetype_quo)) {
+        aes_args$linetype <- linetype_quo
+      }
       out <- do.call(
         build_data_plot,
         c(
@@ -406,7 +476,8 @@ setup_data_plot <- function(
             plot_fn = plot_fn,
             font_size = input$font_size,
             scientific = input$scientific,
-            legend_position = input$legend_position
+            legend_position = input$legend_position,
+            aes_args = aes_args
           ),
           extra
         )
@@ -470,19 +541,43 @@ setup_data_plot <- function(
       if (!is.null(zoom_arg) && !is.null(z$x_min) && !is.null(z$x_max)) {
         plot_args[[zoom_arg]] <- round(c(z$x_min, z$x_max), 1)
       }
-      # mass subset (only when not all available masses are selected)
-      sel_masses <- get_selected_masses()
-      groups <- species_masses()
-      if (!is.null(sel_masses) && nrow(sel_masses) > 0 && !is.null(groups)) {
-        all_masses <- unique(as.character(unlist(groups$masses)))
-        chosen <- unique(as.character(sel_masses$mass))
-        if (length(chosen) > 0 && !setequal(chosen, all_masses)) {
-          plot_args$mass <- chosen
-        }
+      # species / mass selection (see select_species_or_mass): `species=` when
+      # whole species were de-selected, `mass=` when narrowed within a species
+      plot_args <- c(
+        plot_args,
+        select_species_or_mass(get_selected_masses(), species_masses())
+      )
+      # facet / color / linetype aesthetics (only when changed from the defaults
+      # file_name / trace / none); numeric metadata columns are factor()-wrapped
+      fcols <- aes_factor_cols()
+      facet <- input$facet %||% "file_name"
+      if (!identical(facet, "file_name")) {
+        plot_args$facet <- code_raw(code_aes_value(facet, fcols))
+      }
+      color <- input$color %||% "trace"
+      if (!identical(color, "trace")) {
+        plot_args$color <- code_raw(code_aes_value(color, fcols))
+      }
+      linetype <- input$linetype %||% "(none)"
+      if (!identical(linetype, "(none)")) {
+        plot_args$linetype <- code_raw(code_aes_value(linetype, fcols))
+      }
+      # facet scales (default "free")
+      scales <- input$scales %||% "free"
+      if (!identical(scales, "free")) {
+        plot_args$scales <- scales
       }
       # scientific notation (default off)
       if (isTRUE(input$scientific)) {
         plot_args$scientific <- TRUE
+      }
+      # drop unused factor levels (default off)
+      if (isTRUE(input$drop_unused_levels)) {
+        plot_args$drop_unused_levels <- TRUE
+      }
+      # short_time_labels: continuous flow only (dataset_key == "traces")
+      if (identical(dataset_key, "traces") && isTRUE(input$short_time_labels)) {
+        plot_args$short_time_labels <- TRUE
       }
       plot_code <- code_pipe(
         data_var,

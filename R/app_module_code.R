@@ -252,22 +252,57 @@ code_modal <- function(ns, script, quarto) {
   )
 }
 
-# get_code generator for the "Read data files" step: a type-specific find on the
-# placeholder "data" folder (e.g. ir_find_continuous_flow), read into `iso_files`.
-# Type-specific find means no separate filter-for-type step is needed downstream.
-code_read_step <- function(find_fn) {
+# get_code generator for the "Read data files" step: a type-specific find
+# (e.g. ir_find_continuous_flow) read into `iso_files`. The folders searched
+# depend on where the loaded files came from: bundled examples -> `examples_folder`
+# (prepended with ir_copy_examples()), uploaded files -> `upload_folder`. These are
+# the actual folders the app was given (NOT hard-coded). `uses_examples` /
+# `uses_uploads` are optional reactives/functions returning whether each source has
+# any loaded files; when both are present the finds combine into one
+# ir_find_<type>(c(...)). Defaults to the upload folder.
+code_read_step <- function(find_fn,
+                           uses_examples = NULL,
+                           uses_uploads = NULL,
+                           examples_folder = "examples",
+                           upload_folder = "data") {
   force(find_fn)
+  force(uses_examples)
+  force(uses_uploads)
+  ex_dir <- examples_folder %||% "examples"
+  up_dir <- upload_folder %||% "data"
   function(input_var = NULL) {
-    list(
-      code = paste0(
-        "# assumes all data files are in a data folder in the current working directory\n",
-        code_assign(
-          "iso_files",
-          code_pipe(code_call(find_fn, list("data")), code_call("ir_read_isofiles"))
-        )
-      ),
-      output = "iso_files"
+    ex <- !is.null(uses_examples) && isTRUE(uses_examples())
+    up <- !is.null(uses_uploads) && isTRUE(uses_uploads())
+    folders <- c(if (ex) ex_dir, if (up) up_dir)
+    if (length(folders) == 0L) {
+      folders <- up_dir
+    }
+    read <- code_assign(
+      "iso_files",
+      code_pipe(
+        code_call(find_fn, list(folders)),
+        code_call("ir_read_isofiles")
+      )
     )
+    comment <- if (ex && up) {
+      sprintf(
+        "# copy the bundled examples into '%s'; your own files go in '%s'\n",
+        ex_dir,
+        up_dir
+      )
+    } else if (ex) {
+      sprintf(
+        "# copy the bundled isoreader2 example files into '%s', then read them\n",
+        ex_dir
+      )
+    } else {
+      sprintf(
+        "# assumes all data files are in the '%s' folder in the working directory\n",
+        up_dir
+      )
+    }
+    copy <- if (ex) paste0(code_call("ir_copy_examples", list(ex_dir)), "\n") else ""
+    list(code = paste0(comment, copy, read), output = "iso_files")
   }
 }
 
