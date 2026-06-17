@@ -6,8 +6,8 @@
 #' and PDF-download controls. Pair `ie_cf_plot_ui()` and `ie_cf_plot_server()` on one `id`.
 #'
 #' @inheritParams ie_metadata_server
-#' @return `ie_cf_plot_ui()` returns a UI element; `ie_cf_plot_server()` is called for
-#'   its side effects
+#' @return `ie_cf_plot_ui()` returns a UI element; `ie_cf_plot_server()` returns a
+#'   list with a `get_code` generator for the code server (see [ie_code_server()])
 #' @seealso [ie_file_server()], [ie_cf_metadata_server()]
 #' @name ie_cf_plot
 #' @export
@@ -25,8 +25,11 @@ ie_cf_plot_server <- function(id, file) {
     set_units = file$set_units,
     dataset_key = "traces",
     plot_fn = isoreader2::ir_plot_continuous_flow,
+    plot_fn_name = "ir_plot_continuous_flow",
     no_data_message = "No continuous flow trace data available.",
     download_basename = "continuous_flow",
-    zoom_arg = "time_window"
+    zoom_arg = "time_window",
+    get_selection = file$get_cf_selection,
+    get_all_metadata = file$get_cf_metadata
   )
 }

@@ -6,8 +6,8 @@
 #' PDF-download controls. Pair `ie_di_plot_ui()` and `ie_di_plot_server()` on one `id`.
 #'
 #' @inheritParams ie_metadata_server
-#' @return `ie_di_plot_ui()` returns a UI element; `ie_di_plot_server()` is called for
-#'   its side effects
+#' @return `ie_di_plot_ui()` returns a UI element; `ie_di_plot_server()` returns a
+#'   list with a `get_code` generator for the code server (see [ie_code_server()])
 #' @seealso [ie_file_server()], [ie_di_metadata_server()]
 #' @name ie_di_plot
 #' @export
@@ -25,7 +25,11 @@ ie_di_plot_server <- function(id, file) {
     set_units = file$set_units,
     dataset_key = "cycles",
     plot_fn = isoreader2::ir_plot_dual_inlet,
+    plot_fn_name = "ir_plot_dual_inlet",
     no_data_message = "No dual inlet cycle data available.",
-    download_basename = "dual_inlet"
+    download_basename = "dual_inlet",
+    zoom_arg = "cycle_window",
+    get_selection = file$get_di_selection,
+    get_all_metadata = file$get_di_metadata
   )
 }

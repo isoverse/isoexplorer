@@ -3,6 +3,8 @@
 export(ie_cf_metadata_server)
 export(ie_cf_plot_server)
 export(ie_cf_plot_ui)
+export(ie_code_server)
+export(ie_code_ui)
 export(ie_di_metadata_server)
 export(ie_di_plot_server)
 export(ie_di_plot_ui)

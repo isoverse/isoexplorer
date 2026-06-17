@@ -136,9 +136,10 @@ data_plot_view_ui <- function(id, extra_left = NULL) {
 # `list(plot_args = <reactive list spliced into plot_fn>, filter_dataset =
 # <optional function(dataset) restricting the species/mass options>)`; it may
 # also set up extra outputs (e.g. the scans scan-type UI). `zoom_arg` is the name
-# of `plot_fn`'s x-window argument (cf "time_window", scans "x_window"); when set,
-# the zoom window is passed there (filters + rescales y). When NULL (dual inlet),
-# zoom is applied as a post-hoc `coord_cartesian(xlim=)`.
+# of `plot_fn`'s x-window argument (cf "time_window", di "cycle_window", scans
+# "x_window"); when set, the zoom window is passed there (filters + rescales y).
+# When NULL, zoom falls back to a post-hoc `coord_cartesian(xlim=)`, which zooms
+# the view but does NOT rescale y (so it keeps the full y-range, incl. 0).
 setup_data_plot <- function(
   id,
   get_data,
@@ -146,10 +147,13 @@ setup_data_plot <- function(
   set_units,
   dataset_key,
   plot_fn,
+  plot_fn_name,
   no_data_message,
   download_basename = "plot",
   setup_extra = NULL,
-  zoom_arg = NULL
+  zoom_arg = NULL,
+  get_selection = NULL,
+  get_all_metadata = NULL
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -386,8 +390,8 @@ setup_data_plot <- function(
       z <- get_last_zoom()
       window <- if (!is.null(z$x_min)) c(z$x_min, z$x_max) else NULL
       # extra plot args (e.g. scans scan_type) plus the zoom window for plot
-      # functions that take one (cf `time_window`, scans `x_window`); these filter
-      # the data and rescale y. di has no such arg -> coord_cartesian below.
+      # functions that take one (cf `time_window`, di `cycle_window`, scans
+      # `x_window`); these filter the data and rescale y.
       extra <- get_extra_plot_args()
       if (!is.null(zoom_arg) && !is.null(window)) {
         extra[[zoom_arg]] <- window
@@ -413,7 +417,7 @@ setup_data_plot <- function(
       p <- out$result
       values$valid_plot <- !is.null(p)
       if (is.null(zoom_arg) && !is.null(p) && !is.null(window)) {
-        # no plot-function window arg (dual inlet): zoom the view post-hoc
+        # no plot-function window arg: zoom the view post-hoc (does not rescale y)
         p <- p + ggplot2::coord_cartesian(xlim = window)
       }
       p %||% make_empty_plot(input$font_size)
@@ -434,6 +438,79 @@ setup_data_plot <- function(
       })
     )
 
-    invisible(NULL)
+    # CODE GENERATION =====
+    # the plot step for the code server: subset the (already-aggregated) input
+    # variable to the selected files/analyses with ir_filter_metadata(), then plot,
+    # reflecting the current controls -- scan_type and other extras, the zoom
+    # window, a strict mass subset, scientific notation, and the font size / legend
+    # position (folded into the plot's `theme` argument, the way build_data_plot()
+    # applies them). A terminal node (output = NULL).
+    get_code <- function(input_var = NULL) {
+      data_var <- input_var %||% "data"
+
+      # file/analysis selection -> ir_filter_metadata() (dropped when all selected)
+      filter_part <- NULL
+      if (!is.null(get_selection) && !is.null(get_all_metadata)) {
+        expr <- code_metadata_filter(get_selection(), get_all_metadata())
+        if (!is.null(expr)) {
+          filter_part <- code_call("ir_filter_metadata", list(code_raw(expr)))
+        }
+      }
+
+      plot_args <- list()
+      # module extras (e.g. scans scan_type); the zoom window is added separately
+      extra <- get_extra_plot_args()
+      for (nm in names(extra)) {
+        if (!identical(nm, zoom_arg) && !is.null(extra[[nm]])) {
+          plot_args[[nm]] <- extra[[nm]]
+        }
+      }
+      # zoom window -> the plot function's window argument (cf/scans)
+      z <- get_last_zoom()
+      if (!is.null(zoom_arg) && !is.null(z$x_min) && !is.null(z$x_max)) {
+        plot_args[[zoom_arg]] <- round(c(z$x_min, z$x_max), 1)
+      }
+      # mass subset (only when not all available masses are selected)
+      sel_masses <- get_selected_masses()
+      groups <- species_masses()
+      if (!is.null(sel_masses) && nrow(sel_masses) > 0 && !is.null(groups)) {
+        all_masses <- unique(as.character(unlist(groups$masses)))
+        chosen <- unique(as.character(sel_masses$mass))
+        if (length(chosen) > 0 && !setequal(chosen, all_masses)) {
+          plot_args$mass <- chosen
+        }
+      }
+      # scientific notation (default off)
+      if (isTRUE(input$scientific)) {
+        plot_args$scientific <- TRUE
+      }
+      # font size + legend position -> the `theme` argument (matches build_data_plot)
+      fs <- input$font_size %||% 16
+      lp <- input$legend_position %||% "right"
+      if (!identical(as.numeric(fs), 16) || !identical(lp, "right")) {
+        theme_code <- paste0("ir_default_theme(text_size = ", fs, ")")
+        if (!identical(lp, "right")) {
+          pos <- if (identical(lp, "hide")) "none" else lp
+          theme_code <- paste0(
+            theme_code,
+            " + ggplot2::theme(legend.position = ",
+            code_value(pos),
+            ")"
+          )
+        }
+        plot_args$theme <- code_raw(theme_code)
+      }
+
+      list(
+        code = code_pipe(
+          data_var,
+          filter_part,
+          code_call(plot_fn_name, plot_args)
+        ),
+        output = NULL
+      )
+    }
+
+    list(get_code = get_code)
   })
 }

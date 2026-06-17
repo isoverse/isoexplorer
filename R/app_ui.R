@@ -42,8 +42,9 @@ app_ui <- function(
 ) {
   app_title <- "isoexplorer"
 
-  # the right-aligned navbar controls (theme / dark mode / about)
+  # the right-aligned navbar controls (show code / theme / dark mode / about)
   controls <- list(
+    bslib::nav_item(ie_code_ui("code")),
     bslib::nav_item(
       selectInput(
         "theme",

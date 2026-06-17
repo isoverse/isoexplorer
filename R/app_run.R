@@ -8,8 +8,10 @@
 #'
 #' @param isofiles the `ir_isofiles` to explore (handed to the [ie_file_server()])
 #' @param main a single UI content area (use this OR `nav_panels`)
-#' @param setup_modules `function(file)` that wires the app's server modules,
-#'   given the [ie_file_server()] handle
+#' @param setup_modules `function(file, code)` that wires the app's server
+#'   modules, given the [ie_file_server()] handle and the [ie_code_server()] handle
+#'   (register each module's `get_code` with `code$register()`). A one-argument
+#'   `function(file)` is still accepted (the code server is then not populated).
 #' @param timezone timezone for datetime display
 #' @param default_theme default bslib Bootstrap 5 theme preset
 #' @param nav_panels a list of [bslib::nav_panel()]s shown as a centered navbar
@@ -201,15 +203,31 @@ ie_explore_isofiles <- function(
     # open on the first tab that actually has data (e.g. skip Continuous Flow if
     # the provided isofiles only have dual inlet / scan data)
     selected = app_first_type_tab(isofiles),
-    setup_modules = function(file) {
+    setup_modules = function(file, code) {
       # every selector pushes its selection into the shared file server; every
-      # plot pulls its selection-filtered data back out (units are shared too)
+      # plot pulls its selection-filtered data back out (units are shared too).
+      # Each module also registers its get_code() with the code server, forming
+      # the dependency tree isofiles -> <type>_select -> <type>_plot.
+      # each type registers its own read -> aggregate -> plot code chain, grouped
+      # by tab title so the viewer shows only the active tab's code (selectors
+      # still drive which files/analyses the plot step filters to)
       ie_cf_metadata_server("cf_meta", file)
-      ie_cf_plot_server("cf", file)
+      code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow"), group = "Continuous Flow")
+      code$register("cf_agg", "Aggregate data files", code_aggregate_step(file$get_units, "cf_data"), depends_on = "cf_read", group = "Continuous Flow")
+      cf_plot <- ie_cf_plot_server("cf", file)
+      code$register("cf_plot", "Plot continuous flow", cf_plot$get_code, depends_on = "cf_agg", group = "Continuous Flow")
+
       ie_di_metadata_server("di_meta", file)
-      ie_di_plot_server("di", file)
+      code$register("di_read", "Read data files", code_read_step("ir_find_dual_inlet"), group = "Dual Inlet")
+      code$register("di_agg", "Aggregate data files", code_aggregate_step(file$get_units, "di_data"), depends_on = "di_read", group = "Dual Inlet")
+      di_plot <- ie_di_plot_server("di", file)
+      code$register("di_plot", "Plot dual inlet", di_plot$get_code, depends_on = "di_agg", group = "Dual Inlet")
+
       ie_scans_metadata_server("scans_meta", file)
-      ie_scans_plot_server("scans", file)
+      code$register("scans_read", "Read data files", code_read_step("ir_find_scans"), group = "Scans")
+      code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read", group = "Scans")
+      scans_plot <- ie_scans_plot_server("scans", file)
+      code$register("scans_plot", "Plot scans", scans_plot$get_code, depends_on = "scans_agg", group = "Scans")
       # after an upload auto-select, switch to that measurement type's tab
       tab_titles <- c(
         scans = "Scans",
@@ -267,9 +285,12 @@ ie_explore_continuous_flow <- function(
   ie_run_app(
     isofiles = isofiles,
     main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
-    setup_modules = function(file) {
+    setup_modules = function(file, code) {
       ie_cf_metadata_server("cf_meta", file)
-      ie_cf_plot_server("cf", file)
+      code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow"))
+      code$register("cf_agg", "Aggregate data files", code_aggregate_step(file$get_units, "cf_data"), depends_on = "cf_read")
+      cf_plot <- ie_cf_plot_server("cf", file)
+      code$register("cf_plot", "Plot continuous flow", cf_plot$get_code, depends_on = "cf_agg")
     },
     timezone = timezone,
     default_theme = default_theme,
@@ -315,9 +336,12 @@ ie_explore_dual_inlet <- function(
   ie_run_app(
     isofiles = isofiles,
     main = ie_type_explorer_ui("di_meta", ie_di_plot_ui("di")),
-    setup_modules = function(file) {
+    setup_modules = function(file, code) {
       ie_di_metadata_server("di_meta", file)
-      ie_di_plot_server("di", file)
+      code$register("di_read", "Read data files", code_read_step("ir_find_dual_inlet"))
+      code$register("di_agg", "Aggregate data files", code_aggregate_step(file$get_units, "di_data"), depends_on = "di_read")
+      di_plot <- ie_di_plot_server("di", file)
+      code$register("di_plot", "Plot dual inlet", di_plot$get_code, depends_on = "di_agg")
     },
     timezone = timezone,
     default_theme = default_theme,
@@ -365,9 +389,12 @@ ie_explore_scans <- function(
     # the selector pushes its selection into the file server; the plot pulls the
     # selection-filtered scans data back out -- they only talk via the file server
     main = ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans")),
-    setup_modules = function(file) {
+    setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
-      ie_scans_plot_server("scans", file)
+      code$register("scans_read", "Read data files", code_read_step("ir_find_scans"))
+      code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read")
+      scans_plot <- ie_scans_plot_server("scans", file)
+      code$register("scans_plot", "Plot scans", scans_plot$get_code, depends_on = "scans_agg")
     },
     timezone = timezone,
     default_theme = default_theme,
@@ -411,8 +438,10 @@ ie_explore_metadata <- function(
   ie_run_app(
     isofiles = isofiles,
     main = ie_metadata_ui("scans_meta"),
-    setup_modules = function(file) {
+    setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
+      code$register("scans_read", "Read data files", code_read_step("ir_find_scans"))
+      code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read")
     },
     timezone = timezone,
     default_theme = default_theme,

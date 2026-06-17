@@ -1,5 +1,6 @@
-# app server: instantiates the central file-management module and wires the
-# app-specific modules via `setup_modules(file)`, and handles theme switching.
+# app server: instantiates the central file-management and code-generation
+# modules and wires the app-specific modules via `setup_modules(file, code)`, and
+# handles theme switching.
 # `initial_selection` ("all" / "none" / function(metadata)) sets what is selected
 # on load; `upload_folder` controls the navbar upload button; `monitoring_folders`
 # lists folders to watch (all passed through to the file server).
@@ -24,8 +25,19 @@ app_server <- function(
       examples_folder = examples_folder
     )
 
-    # app-specific module wiring
-    setup_modules(file)
+    # central code generation: each measurement type registers its own read ->
+    # aggregate -> plot chain in setup_modules() below. The active navbar tab (its
+    # title doubles as the registration `group`) restricts the document to that
+    # type; focused apps have no real tabs, so input$ie_navbar is empty and
+    # everything registered is shown.
+    code <- ie_code_server("code", get_active_group = reactive(input$ie_navbar))
+
+    # app-specific module wiring (older setup_modules(file) closures still work)
+    if (length(formals(setup_modules)) >= 2L) {
+      setup_modules(file, code)
+    } else {
+      setup_modules(file)
+    }
 
     # theme switching
     current_theme <- reactiveVal(NA_character_)

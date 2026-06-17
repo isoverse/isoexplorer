@@ -21,8 +21,8 @@
 #'   exclusively select (e.g. `file$get_scans_select_signal`, fired by upload
 #'   auto-select); applied once the table contains those files
 #' @param file the [ie_file_server()] handle (for the typed wrappers)
-#' @return a list with the underlying selector-table handle plus
-#'   `get_selected_row_id` and `get_selected_metadata` reactives
+#' @return a list with the underlying selector-table handle plus the
+#'   `get_selected_row_id` / `get_selected_metadata` reactives
 #' @export
 ie_metadata_server <- function(
   id,

@@ -7,8 +7,9 @@
 #' `ie_scans_plot_server()` on one `id`.
 #'
 #' @inheritParams ie_metadata_server
-#' @return `ie_scans_plot_ui()` returns a UI element; `ie_scans_plot_server()` is called
-#'   for its side effects
+#' @return `ie_scans_plot_ui()` returns a UI element; `ie_scans_plot_server()`
+#'   returns a list with a `get_code` generator for the code server (see
+#'   [ie_code_server()])
 #' @seealso [ie_file_server()], [ie_scans_metadata_server()]
 #' @name ie_scans_plot
 #' @export
@@ -39,9 +40,12 @@ ie_scans_plot_server <- function(id, file) {
     set_units = file$set_units,
     dataset_key = "scans",
     plot_fn = isoreader2::ir_plot_scans,
+    plot_fn_name = "ir_plot_scans",
     no_data_message = "No scan data available.",
     download_basename = "scans",
     zoom_arg = "x_window",
+    get_selection = file$get_scans_selection,
+    get_all_metadata = file$get_scans_metadata,
     setup_extra = function(get_data, input, output, session) {
       ns <- session$ns
 
