@@ -11,6 +11,7 @@ you can recombine into your own app.
 ```r
 # install.packages("pak")
 pak::pak("isoverse/isoreader2")
+isoreader2::ir_check_isoextract()
 pak::pak("isoverse/isoexplorer")
 ```
 
