@@ -201,7 +201,10 @@ ie_code_ui <- function(id) {
       "Show code",
       icon = icon("code"),
       class = "btn-sm"
-    )
+    ) |>
+      add_tooltip(
+        "Show the isoreader2 code that reproduces the current view"
+      )
   )
 }
 
