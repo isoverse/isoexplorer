@@ -201,8 +201,20 @@ setup_data_plot <- function(
     # color=trace, linetype=none) are valid choices. Numeric and date/time metadata
     # columns are factor()-wrapped when used as a discrete aesthetic (see
     # aes_factor_cols + the plot/code below).
-    aes_factor_cols <- reactive({
+    # the selected data's metadata, restricted to columns that actually carry a
+    # value for the current selection: the app's selection filter keeps every
+    # column (NA where it doesn't apply), so we drop the all-NA ones here -- the
+    # same columns ir_filter_metadata() keeps -- so the aes dropdowns only offer
+    # metadata present in the selected files/analyses.
+    aes_metadata <- reactive({
       md <- get_data()$metadata
+      if (is.null(md)) {
+        return(NULL)
+      }
+      md[, vapply(md, function(x) !all(is.na(x)), logical(1)), drop = FALSE]
+    })
+    aes_factor_cols <- reactive({
+      md <- aes_metadata()
       if (is.null(md)) {
         return(character(0))
       }
@@ -213,7 +225,7 @@ setup_data_plot <- function(
       )]
     })
     output$aes_options <- renderUI({
-      md <- get_data()$metadata
+      md <- aes_metadata()
       req(md)
       ch <- c("species", "mass", "trace", setdiff(names(md), "file_path"))
       tagList(

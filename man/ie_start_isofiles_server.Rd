@@ -13,6 +13,7 @@ ie_start_isofiles_server(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = "examples",
+  temporary_storage = FALSE,
   max_upload_size = NULL
 )
 }
@@ -46,6 +47,10 @@ automatically (\code{NULL} = off); see \code{\link[=ie_file_server]{ie_file_serv
 \item{examples_folder}{directory the "Load examples" navbar button copies the
 isoreader2 bundled example files into and loads; \code{"examples"} by default
 (\code{NULL} hides the button)}
+
+\item{temporary_storage}{if \code{TRUE}, the upload dialog notes that uploaded files
+are stored only for the duration of the session (informational; default
+\code{FALSE})}
 
 \item{max_upload_size}{maximum per-file upload size in MB (sets the
 \code{shiny.maxRequestSize} option); \code{NULL} (the default) keeps Shiny's ~5 MB

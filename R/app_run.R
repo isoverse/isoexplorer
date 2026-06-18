@@ -25,6 +25,8 @@
 #'   see [ie_file_server()]
 #' @param examples_folder directory for the "Load examples" navbar button
 #'   (`NULL` = off), see [ie_file_server()]
+#' @param temporary_storage note in the upload dialog that uploads are
+#'   session-only (informational; default `FALSE`), see [ie_file_server()]
 #' @param max_upload_size maximum per-file upload size in MB; sets the
 #'   `shiny.maxRequestSize` option for the running app. `NULL` (the default)
 #'   leaves Shiny's ~5 MB default (or a value you set yourself) untouched. Raw
@@ -44,6 +46,7 @@ ie_run_app <- function(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
+  temporary_storage = FALSE,
   max_upload_size = NULL,
   options = list(),
   uiPattern = "/",
@@ -73,7 +76,8 @@ ie_run_app <- function(
     initial_selection = initial_selection,
     upload_folder = upload_folder,
     monitoring_folders = monitoring_folders,
-    examples_folder = examples_folder
+    examples_folder = examples_folder,
+    temporary_storage = temporary_storage
   )
 
   shinyApp(
@@ -138,6 +142,9 @@ app_focused_filter <- function(isofiles, filter_fn, filter_fn_name) {
 #' @param examples_folder directory the "Load examples" navbar button copies the
 #'   isoreader2 bundled example files into and loads; `"examples"` by default
 #'   (`NULL` hides the button)
+#' @param temporary_storage if `TRUE`, the upload dialog notes that uploaded files
+#'   are stored only for the duration of the session (informational; default
+#'   `FALSE`)
 #' @param max_upload_size maximum per-file upload size in MB (sets the
 #'   `shiny.maxRequestSize` option); `NULL` (the default) keeps Shiny's ~5 MB
 #'   default. Raw isofiles are often larger, so raise this when allowing uploads.
@@ -153,6 +160,7 @@ ie_start_isofiles_server <- function(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = "examples",
+  temporary_storage = FALSE,
   max_upload_size = NULL
 ) {
   log_info("\n\n========================================================")
@@ -229,6 +237,7 @@ ie_start_isofiles_server <- function(
     upload_folder = upload_folder,
     monitoring_folders = monitoring_folders,
     examples_folder = examples_folder,
+    temporary_storage = temporary_storage,
     max_upload_size = max_upload_size,
     options = options,
     uiPattern = uiPattern,

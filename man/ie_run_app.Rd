@@ -16,6 +16,7 @@ ie_run_app(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
+  temporary_storage = FALSE,
   max_upload_size = NULL,
   options = list(),
   uiPattern = "/",
@@ -52,6 +53,9 @@ see \code{\link[=ie_file_server]{ie_file_server()}}}
 
 \item{examples_folder}{directory for the "Load examples" navbar button
 (\code{NULL} = off), see \code{\link[=ie_file_server]{ie_file_server()}}}
+
+\item{temporary_storage}{note in the upload dialog that uploads are
+session-only (informational; default \code{FALSE}), see \code{\link[=ie_file_server]{ie_file_server()}}}
 
 \item{max_upload_size}{maximum per-file upload size in MB; sets the
 \code{shiny.maxRequestSize} option for the running app. \code{NULL} (the default)

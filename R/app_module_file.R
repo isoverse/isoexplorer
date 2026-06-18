@@ -55,6 +55,9 @@
 #' @param examples_folder directory the "Load examples" navbar button copies the
 #'   isoreader2 bundled example files into (and then loads). `NULL` (the default)
 #'   means no examples button.
+#' @param temporary_storage if `TRUE`, the upload dialog states that uploaded
+#'   files are stored only for the duration of the session. Informational only --
+#'   it does not change how or where files are stored (default `FALSE`).
 #' @return The "file handle": a list of reactive accessors / setters. For each
 #'   `<type>` in `scans` / `cf` / `di`: `get_units()`/`set_units(units)` (shared
 #'   intensity units, default "mV"); `get_<type>_metadata()`;
@@ -69,7 +72,8 @@ ie_file_server <- function(
   initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
-  examples_folder = NULL
+  examples_folder = NULL,
+  temporary_storage = FALSE
 ) {
   if (!is.function(initial_selection)) {
     initial_selection <- arg_match(initial_selection, c("all", "none"))
@@ -438,6 +442,12 @@ ie_file_server <- function(
           tags$code(".zip"),
           " archives (the archive contents are unpacked)."
         ),
+        if (isTRUE(temporary_storage)) {
+          div(
+            class = "alert alert-info",
+            "Note: uploaded files are stored only temporarily, for the duration of your session."
+          )
+        },
         checkboxInput(
           ns("upload_autoselect"),
           "Auto-select the newly uploaded files",

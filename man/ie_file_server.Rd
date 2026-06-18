@@ -11,7 +11,8 @@ ie_file_server(
   initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
-  examples_folder = NULL
+  examples_folder = NULL,
+  temporary_storage = FALSE
 )
 
 ie_file_ui(id)
@@ -39,6 +40,10 @@ there with \code{\link[isoreader2:ir_find_isofiles]{isoreader2::ir_find_isofiles
 \item{examples_folder}{directory the "Load examples" navbar button copies the
 isoreader2 bundled example files into (and then loads). \code{NULL} (the default)
 means no examples button.}
+
+\item{temporary_storage}{if \code{TRUE}, the upload dialog states that uploaded
+files are stored only for the duration of the session. Informational only --
+it does not change how or where files are stored (default \code{FALSE}).}
 }
 \value{
 The "file handle": a list of reactive accessors / setters. For each

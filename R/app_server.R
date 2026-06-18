@@ -10,7 +10,8 @@ app_server <- function(
   initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
-  examples_folder = NULL
+  examples_folder = NULL,
+  temporary_storage = FALSE
 ) {
   function(input, output, session) {
     # central file management: splits the isofiles by measurement type, owns the
@@ -22,7 +23,8 @@ app_server <- function(
       initial_selection = initial_selection,
       upload_folder = upload_folder,
       monitoring_folders = monitoring_folders,
-      examples_folder = examples_folder
+      examples_folder = examples_folder,
+      temporary_storage = temporary_storage
     )
 
     # central code generation: each measurement type registers its own read ->
