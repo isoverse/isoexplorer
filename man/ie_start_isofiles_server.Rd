@@ -13,7 +13,8 @@ ie_start_isofiles_server(
   initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
-  examples_folder = "examples"
+  examples_folder = "examples",
+  max_upload_size = NULL
 )
 }
 \arguments{
@@ -50,6 +51,10 @@ automatically (\code{NULL} = off); see \code{\link[=ie_file_server]{ie_file_serv
 \item{examples_folder}{directory the "Load examples" navbar button copies the
 isoreader2 bundled example files into and loads; \code{"examples"} by default
 (\code{NULL} hides the button)}
+
+\item{max_upload_size}{maximum per-file upload size in MB (sets the
+\code{shiny.maxRequestSize} option); \code{NULL} (the default) keeps Shiny's ~5 MB
+default. Raw isofiles are often larger, so raise this when allowing uploads.}
 }
 \value{
 a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object

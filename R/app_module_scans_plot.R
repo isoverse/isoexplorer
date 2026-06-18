@@ -41,7 +41,7 @@ ie_scans_plot_server <- function(id, file) {
     dataset_key = "scans",
     plot_fn = isoreader2::ir_plot_scans,
     plot_fn_name = "ir_plot_scans",
-    no_data_message = "No scan data available.",
+    no_data_message = "No scan data selected/available.",
     download_basename = "scans",
     zoom_arg = "x_window",
     get_selection = file$get_scans_selection,

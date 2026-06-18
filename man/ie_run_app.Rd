@@ -16,6 +16,7 @@ ie_run_app(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
+  max_upload_size = NULL,
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url"
@@ -51,6 +52,11 @@ see \code{\link[=ie_file_server]{ie_file_server()}}}
 
 \item{examples_folder}{directory for the "Load examples" navbar button
 (\code{NULL} = off), see \code{\link[=ie_file_server]{ie_file_server()}}}
+
+\item{max_upload_size}{maximum per-file upload size in MB; sets the
+\code{shiny.maxRequestSize} option for the running app. \code{NULL} (the default)
+leaves Shiny's ~5 MB default (or a value you set yourself) untouched. Raw
+isofiles are often larger than 5 MB, so raise this when enabling uploads.}
 
 \item{options}{Named options that should be passed to the \code{runApp} call
 (these can be any of the following: "port", "launch.browser", "host", "quiet",

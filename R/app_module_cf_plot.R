@@ -35,7 +35,7 @@ ie_cf_plot_server <- function(id, file) {
     dataset_key = "traces",
     plot_fn = isoreader2::ir_plot_continuous_flow,
     plot_fn_name = "ir_plot_continuous_flow",
-    no_data_message = "No continuous flow trace data available.",
+    no_data_message = "No continuous flow trace data selected/available.",
     download_basename = "continuous_flow",
     zoom_arg = "time_window",
     get_selection = file$get_cf_selection,

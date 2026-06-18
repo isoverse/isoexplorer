@@ -155,8 +155,15 @@ ie_file_server <- function(
       if (length(new) == 0) {
         return(invisible(NULL))
       }
-      out <- isoreader2::ir_read_isofiles(new, show_progress = FALSE) |>
-        try_catch_cnds()
+      # reading can take a while for many/large files; show a progress indicator
+      # so the user knows the upload / load is being processed (the file picker's
+      # own bar only covers the browser->server transfer, not the read)
+      out <- withProgress(
+        message = format_inline("Loading {length(new)} data file{?s}"),
+        value = 0.5,
+        isoreader2::ir_read_isofiles(new, show_progress = FALSE) |>
+          try_catch_cnds()
+      )
       out |> log_cnds(ns = ns)
       log_problems(out$result, "Problem(s) reading data files")
       merge_isofiles(out$result)

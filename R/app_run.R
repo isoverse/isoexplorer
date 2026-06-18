@@ -25,6 +25,10 @@
 #'   see [ie_file_server()]
 #' @param examples_folder directory for the "Load examples" navbar button
 #'   (`NULL` = off), see [ie_file_server()]
+#' @param max_upload_size maximum per-file upload size in MB; sets the
+#'   `shiny.maxRequestSize` option for the running app. `NULL` (the default)
+#'   leaves Shiny's ~5 MB default (or a value you set yourself) untouched. Raw
+#'   isofiles are often larger than 5 MB, so raise this when enabling uploads.
 #' @inheritParams shiny::shinyApp
 #' @return a [shiny::shinyApp()] object
 #' @export
@@ -40,6 +44,7 @@ ie_run_app <- function(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
+  max_upload_size = NULL,
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url"
@@ -47,6 +52,12 @@ ie_run_app <- function(
   # ensure isoreader2 is attached so .onAttach runs and registers the aggregators
   if (!"isoreader2" %in% .packages()) {
     library(isoreader2)
+  }
+
+  # raise the per-file upload cap when asked (shiny.maxRequestSize is in bytes);
+  # Shiny reads this option per request, so setting it here covers the whole app
+  if (!is.null(max_upload_size)) {
+    options(shiny.maxRequestSize = max_upload_size * 1024^2)
   }
 
   ui <- app_ui(
@@ -128,6 +139,9 @@ app_focused_filter <- function(isofiles, filter_fn, filter_fn_name) {
 #' @param examples_folder directory the "Load examples" navbar button copies the
 #'   isoreader2 bundled example files into and loads; `"examples"` by default
 #'   (`NULL` hides the button)
+#' @param max_upload_size maximum per-file upload size in MB (sets the
+#'   `shiny.maxRequestSize` option); `NULL` (the default) keeps Shiny's ~5 MB
+#'   default. Raw isofiles are often larger, so raise this when allowing uploads.
 #' @inheritParams shiny::shinyApp
 #' @return a [shiny::shinyApp()] object
 #' @export
@@ -140,7 +154,8 @@ ie_start_isofiles_server <- function(
   initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
-  examples_folder = "examples"
+  examples_folder = "examples",
+  max_upload_size = NULL
 ) {
   log_info("\n\n========================================================")
   log_info(
@@ -214,6 +229,7 @@ ie_start_isofiles_server <- function(
     upload_folder = upload_folder,
     monitoring_folders = monitoring_folders,
     examples_folder = examples_folder,
+    max_upload_size = max_upload_size,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking

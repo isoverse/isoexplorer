@@ -64,6 +64,16 @@ ie_start_isofiles_server(upload_folder = "uploads", monitoring_folders = "incomi
 Only newly seen files are ever read, so adding files is cheap. A "get started"
 prompt is shown until something is loaded.
 
+Shiny caps uploads at 5 MB per file by default; since raw isofiles are often
+larger, raise it with `max_upload_size` (in MB):
+
+```r
+ie_start_isofiles_server(upload_folder = "uploads", max_upload_size = 200)
+```
+
+Behind a reverse proxy (e.g. nginx in front of ShinyProxy) you may also need to
+raise that proxy's own request-body limit (nginx: `client_max_body_size`).
+
 ## Show the code
 
 Every app has a **Show code** button (top-right of the navbar) that assembles,

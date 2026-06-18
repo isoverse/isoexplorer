@@ -26,7 +26,7 @@ ie_di_plot_server <- function(id, file) {
     dataset_key = "cycles",
     plot_fn = isoreader2::ir_plot_dual_inlet,
     plot_fn_name = "ir_plot_dual_inlet",
-    no_data_message = "No dual inlet cycle data available.",
+    no_data_message = "No dual inlet cycle data selected/available.",
     download_basename = "dual_inlet",
     zoom_arg = "cycle_window",
     get_selection = file$get_di_selection,
