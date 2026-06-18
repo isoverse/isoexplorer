@@ -245,7 +245,11 @@ ie_file_server <- function(
     }
     meta_agg_for <- function(get_subset) {
       incremental_agg(get_subset, function(iso) {
-        isoreader2::ir_aggregate_isofiles(iso, aggregator = "metadata")
+        isoreader2::ir_aggregate_isofiles(
+          iso,
+          aggregator = "metadata",
+          show_progress = FALSE
+        )
       })
     }
     data_agg_for <- function(get_subset, type_label) {
@@ -261,7 +265,11 @@ ie_file_server <- function(
               get_units()
             )
           )
-          isoreader2::ir_aggregate_isofiles(iso, intensity_units = get_units())
+          isoreader2::ir_aggregate_isofiles(
+            iso,
+            intensity_units = get_units(),
+            show_progress = FALSE
+          )
         },
         reset_key = get_units
       )
