@@ -160,6 +160,7 @@ ie_file_server <- function(
       # own bar only covers the browser->server transfer, not the read)
       out <- withProgress(
         message = format_inline("Loading {length(new)} data file{?s}"),
+        detail = "This may take a moment...",
         value = 0.5,
         isoreader2::ir_read_isofiles(new, show_progress = FALSE) |>
           try_catch_cnds()
