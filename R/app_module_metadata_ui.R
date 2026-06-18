@@ -32,7 +32,7 @@ ie_metadata_ui <- function(id) {
       module_selector_table_ui(ns("metadata")),
       div(
         class = "small text-muted mt-2",
-        "Double click analysis or file name row for quick exclusive selection."
+        "Double click analysis or file name row for exclusive selection."
       )
     )
   )
