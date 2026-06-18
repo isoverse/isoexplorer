@@ -10,7 +10,6 @@ ie_start_isofiles_server(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = "examples",
@@ -38,10 +37,6 @@ for more information on bookmarking your app.}
 
 \item{default_theme}{the default bslib Bootstrap 5 theme preset}
 
-\item{initial_selection}{what is selected (per measurement type) once files
-load: \code{"all"} (default), \code{"none"}, or a \verb{function(metadata)} that is called
-with a type's metadata tibble and returns the subset of rows to select}
-
 \item{upload_folder}{upload directory for the navbar upload button; \code{NULL}
 (the default) means no upload button, a path enables it; see \code{\link[=ie_file_server]{ie_file_server()}}}
 
@@ -66,4 +61,6 @@ plot. Unlike the focused \code{\link[=ie_explore_continuous_flow]{ie_explore_con
 NOT take an \code{ir_isofiles} object -- data arrives at runtime via the navbar
 \strong{Upload} button, any watched \code{monitoring_folders}, and/or the \strong{Load
 examples} button (a "get started" prompt is shown until something is loaded).
+Loaded examples are selected automatically; uploaded files are selected only
+when the upload modal's "Select the uploaded files" box is checked.
 }

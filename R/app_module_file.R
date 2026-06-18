@@ -25,7 +25,7 @@
 #' serializations such as `foo.cf.json`). Uploaded files are stored in
 #' `upload_folder` (archives unpacked), and **only the just-uploaded files are
 #' read** -- files already present in `upload_folder` when the app started are
-#' left untouched. A "Select the uploaded files" checkbox (on by default)
+#' left untouched. An "Auto-select the newly uploaded files" checkbox (on by default)
 #' exclusively selects the new files in the relevant type's table and, in the full
 #' multi-tab app, switches to that type's tab.
 #'
@@ -291,7 +291,10 @@ ie_file_server <- function(
     }
 
     # per-type selection: a user override (NULL until a selector pushes something)
-    # on top of `initial_selection` (NULL = all, 0-row = none, else filter by uidx)
+    # on top of `initial_selection` (NULL = all, 0-row = none, else filter by uidx).
+    # `has_override` reports whether a concrete selection has been pushed yet (vs
+    # the initial-selection default still being in effect); the upload handler
+    # uses it to keep that default from claiming files the user declined to select.
     make_selection <- function(get_type_metadata) {
       override <- reactiveVal(NULL)
       list(
@@ -302,12 +305,18 @@ ie_file_server <- function(
             resolve_initial_selection(get_type_metadata())
           }
         }),
-        set = function(x) override(x)
+        set = function(x) override(x),
+        has_override = function() !is.null(isolate(override()))
       )
     }
     scans_selection <- make_selection(get_scans_metadata)
     cf_selection <- make_selection(get_cf_metadata)
     di_selection <- make_selection(get_di_metadata)
+    selections <- list(
+      scans = scans_selection,
+      cf = cf_selection,
+      di = di_selection
+    )
 
     # the selection-filtered aggregated data the plot modules consume
     aggregated_for <- function(get_data_agg, get_selected) {
@@ -359,6 +368,21 @@ ie_file_server <- function(
       cf = isoreader2::ir_filter_for_continuous_flow,
       di = isoreader2::ir_filter_for_dual_inlet
     )
+    # select the freshly-added isofiles in each type's selector (via the select
+    # signal). `activate` also switches to the first type that received files --
+    # used for uploads (the user acted on specific files); examples populate every
+    # type, so they select without yanking the user to a different tab.
+    select_new <- function(new_iso, activate = TRUE) {
+      first_type <- NULL
+      for (type in names(type_filters)) {
+        sub <- type_filters[[type]](new_iso)
+        if (!is.null(sub) && nrow(sub) > 0) {
+          select_signals[[type]](sub$file_path)
+          if (is.null(first_type)) first_type <- type
+        }
+      }
+      if (activate && !is.null(first_type)) set_active_type(first_type)
+    }
 
     # LOAD EXAMPLES (optional) =====
     # a navbar button that copies the isoreader2 bundled example files into
@@ -388,6 +412,8 @@ ie_file_server <- function(
           if (n == 1L) "" else "s"
         )
       )
+      # examples are always selected on load (no checkbox), across every type
+      if (n > 0) select_new(new_iso, activate = FALSE)
     }
     observeEvent(input$load_examples, do_load_examples())
 
@@ -412,6 +438,11 @@ ie_file_server <- function(
           tags$code(".zip"),
           " archives (the archive contents are unpacked)."
         ),
+        checkboxInput(
+          ns("upload_autoselect"),
+          "Auto-select the newly uploaded files",
+          value = TRUE
+        ),
         fileInput(
           ns("upload_files"),
           label = NULL,
@@ -420,11 +451,6 @@ ie_file_server <- function(
           width = "100%",
           buttonLabel = "Browse...",
           placeholder = "No files selected"
-        ),
-        checkboxInput(
-          ns("upload_autoselect"),
-          "Select the uploaded files",
-          value = TRUE
         ),
         footer = modalButton("Close"),
         easyClose = TRUE
@@ -473,15 +499,20 @@ ie_file_server <- function(
       )
       # auto-select the uploaded files (per type) + switch to their tab
       if (isTRUE(input$upload_autoselect) && n_new > 0) {
-        first_type <- NULL
+        select_new(new_iso)
+      } else if (n_new > 0) {
+        # the user opted NOT to select the uploads: prevent the default "select
+        # all" initial selection from grabbing them on a type's first-ever upload.
+        # A type with no selection pushed yet is pinned to "none"; a type that
+        # already has a selection keeps it (the new files simply aren't added).
         for (type in names(type_filters)) {
           sub <- type_filters[[type]](new_iso)
-          if (!is.null(sub) && nrow(sub) > 0) {
-            select_signals[[type]](sub$file_path)
-            if (is.null(first_type)) first_type <- type
+          if (
+            !is.null(sub) && nrow(sub) > 0 && !selections[[type]]$has_override()
+          ) {
+            selections[[type]]$set(tibble::tibble())
           }
         }
-        if (!is.null(first_type)) set_active_type(first_type)
       }
     })
 

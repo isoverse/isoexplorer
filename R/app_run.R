@@ -126,12 +126,11 @@ app_focused_filter <- function(isofiles, filter_fn, filter_fn_name) {
 #' NOT take an `ir_isofiles` object -- data arrives at runtime via the navbar
 #' **Upload** button, any watched `monitoring_folders`, and/or the **Load
 #' examples** button (a "get started" prompt is shown until something is loaded).
+#' Loaded examples are selected automatically; uploaded files are selected only
+#' when the upload modal's "Select the uploaded files" box is checked.
 #'
 #' @param timezone the timezone to use for datetime display
 #' @param default_theme the default bslib Bootstrap 5 theme preset
-#' @param initial_selection what is selected (per measurement type) once files
-#'   load: `"all"` (default), `"none"`, or a `function(metadata)` that is called
-#'   with a type's metadata tibble and returns the subset of rows to select
 #' @param upload_folder upload directory for the navbar upload button; `NULL`
 #'   (the default) means no upload button, a path enables it; see [ie_file_server()]
 #' @param monitoring_folders folders to watch for new isofiles, read and added
@@ -151,7 +150,6 @@ ie_start_isofiles_server <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all",
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = "examples",
@@ -225,7 +223,9 @@ ie_start_isofiles_server <- function(
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = initial_selection,
+    # no seed data: selection is fully explicit (examples select on load, uploads
+    # follow the upload checkbox) -- no initial "select all" default applies
+    initial_selection = "none",
     upload_folder = upload_folder,
     monitoring_folders = monitoring_folders,
     examples_folder = examples_folder,

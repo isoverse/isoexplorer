@@ -99,6 +99,14 @@ ie_metadata_server <- function(
             # only once the table has rendered these rows (else keep waiting)
             if (length(target) > 0 && all(target %in% rendered_ids)) {
               metadata_table$select_rows(ids = target)
+              # push straight to the file server too: the debounced selection ->
+              # push observer below can miss this programmatic select (debounce
+              # folds the brief empty state into its first emission, which
+              # `ignoreInit` drops), which with a non-"all" default would leave the
+              # data filtered to nothing. Pushing here makes the selected data load.
+              if (!is.null(set_selected)) {
+                set_selected(data[data$row_id %in% target, , drop = FALSE])
+              }
               pending_paths(NULL)
               synced(TRUE)
             }

@@ -76,7 +76,7 @@ types isoreader2 reads, and \code{.json} -- which covers their \verb{.<type>.jso
 serializations such as \code{foo.cf.json}). Uploaded files are stored in
 \code{upload_folder} (archives unpacked), and \strong{only the just-uploaded files are
 read} -- files already present in \code{upload_folder} when the app started are
-left untouched. A "Select the uploaded files" checkbox (on by default)
+left untouched. An "Auto-select the newly uploaded files" checkbox (on by default)
 exclusively selects the new files in the relevant type's table and, in the full
 multi-tab app, switches to that type's tab.
 

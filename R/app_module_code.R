@@ -3,7 +3,7 @@
 #' A central module that assembles "idealized example code" for an isoexplorer
 #' app and shows it in a viewer. It is instantiated once at the top level; every
 #' other module that can contribute code returns a `get_code()` generator, and the
-#' top-level wiring **registers** each one here with [register()] under an id, a
+#' top-level wiring **registers** each one here with `register()` under an id, a
 #' heading, and (optionally) the id it `depends_on`.
 #'
 #' The registrations form a dependency tree. When the user clicks the navbar
@@ -45,7 +45,13 @@ ie_code_server <- function(id, get_active_group = reactive(NULL)) {
     # code_id -> list(heading, get_code, depends_on, group). Populated once at app
     # setup via register() (synchronous, before any click), read on assembly.
     registry <- list()
-    register <- function(code_id, heading, get_code, depends_on = NULL, group = NULL) {
+    register <- function(
+      code_id,
+      heading,
+      get_code,
+      depends_on = NULL,
+      group = NULL
+    ) {
       registry[[code_id]] <<- list(
         heading = heading,
         get_code = get_code,
@@ -89,7 +95,9 @@ ie_code_server <- function(id, get_active_group = reactive(NULL)) {
         res <- tryCatch(
           registry[[node$id]]$get_code(input_var = parent_output),
           error = function(e) {
-            list(code = paste0("# (code unavailable: ", conditionMessage(e), ")"))
+            list(
+              code = paste0("# (code unavailable: ", conditionMessage(e), ")")
+            )
           }
         )
         outputs[[node$id]] <- res$output
@@ -110,7 +118,11 @@ ie_code_server <- function(id, get_active_group = reactive(NULL)) {
           sections
         )
       }
-      render_code_document(sections, quarto = quarto, front_matter = front_matter)
+      render_code_document(
+        sections,
+        quarto = quarto,
+        front_matter = front_matter
+      )
     }
 
     # (re)open the viewer with the freshly assembled document (no YAML front
@@ -165,7 +177,10 @@ ie_code_server <- function(id, get_active_group = reactive(NULL)) {
       },
       content = function(file) {
         # the downloaded .qmd is a complete document -- with the YAML front matter
-        writeLines(build_document(quarto = TRUE, front_matter = TRUE)$script, file)
+        writeLines(
+          build_document(quarto = TRUE, front_matter = TRUE)$script,
+          file
+        )
       }
     )
 
@@ -260,11 +275,13 @@ code_modal <- function(ns, script, quarto) {
 # `uses_uploads` are optional reactives/functions returning whether each source has
 # any loaded files; when both are present the finds combine into one
 # ir_find_<type>(c(...)). Defaults to the upload folder.
-code_read_step <- function(find_fn,
-                           uses_examples = NULL,
-                           uses_uploads = NULL,
-                           examples_folder = "examples",
-                           upload_folder = "data") {
+code_read_step <- function(
+  find_fn,
+  uses_examples = NULL,
+  uses_uploads = NULL,
+  examples_folder = "examples",
+  upload_folder = "data"
+) {
   force(find_fn)
   force(uses_examples)
   force(uses_uploads)
@@ -301,7 +318,11 @@ code_read_step <- function(find_fn,
         up_dir
       )
     }
-    copy <- if (ex) paste0(code_call("ir_copy_examples", list(ex_dir)), "\n") else ""
+    copy <- if (ex) {
+      paste0(code_call("ir_copy_examples", list(ex_dir)), "\n")
+    } else {
+      ""
+    }
     list(code = paste0(comment, copy, read), output = "iso_files")
   }
 }
@@ -317,7 +338,10 @@ code_aggregate_step <- function(get_units, output_var) {
         output_var,
         code_pipe(
           input_var %||% "iso_files",
-          code_call("ir_aggregate_isofiles", list(intensity_units = get_units()))
+          code_call(
+            "ir_aggregate_isofiles",
+            list(intensity_units = get_units())
+          )
         )
       ),
       output = output_var
@@ -330,7 +354,12 @@ code_aggregate_step <- function(get_units, output_var) {
 # it), so aggregate it directly into `output_var`. `filter_fn` is the
 # ir_filter_for_<type> name to insert first, or NULL to omit it (the caller passes
 # NULL when the object already holds only the focused type -- no filter needed).
-code_object_aggregate_step <- function(obj_name, filter_fn, get_units, output_var) {
+code_object_aggregate_step <- function(
+  obj_name,
+  filter_fn,
+  get_units,
+  output_var
+) {
   force(obj_name)
   force(filter_fn)
   force(get_units)
@@ -342,7 +371,10 @@ code_object_aggregate_step <- function(obj_name, filter_fn, get_units, output_va
         code_pipe(
           obj_name,
           if (!is.null(filter_fn)) code_call(filter_fn) else NULL,
-          code_call("ir_aggregate_isofiles", list(intensity_units = get_units()))
+          code_call(
+            "ir_aggregate_isofiles",
+            list(intensity_units = get_units())
+          )
         )
       ),
       output = output_var

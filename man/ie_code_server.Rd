@@ -25,7 +25,7 @@ return \code{list(script, headings)}; exposed mainly for testing).
 A central module that assembles "idealized example code" for an isoexplorer
 app and shows it in a viewer. It is instantiated once at the top level; every
 other module that can contribute code returns a \code{get_code()} generator, and the
-top-level wiring \strong{registers} each one here with \code{\link[=register]{register()}} under an id, a
+top-level wiring \strong{registers} each one here with \code{register()} under an id, a
 heading, and (optionally) the id it \code{depends_on}.
 }
 \details{
