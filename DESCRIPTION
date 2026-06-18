@@ -1,6 +1,6 @@
 Package: isoexplorer
 Title: GUI to Explore Stable Isotope Data Files
-Version: 0.2.0
+Version: 0.2.1
 Authors@R:
     person("Sebastian", "Kopf", , "seb.kopf@gmail.com", role = c("aut", "cre"))
 Description: Provides a graphical user interface to explore stable isotope data files using the isoreader2 package, including browsing, visualizing, and exporting isotope data.
