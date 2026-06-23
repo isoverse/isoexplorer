@@ -62,9 +62,11 @@
 #'   `<type>` in `scans` / `cf` / `di`: `get_units()`/`set_units(units)` (shared
 #'   intensity units, default "mV"); `get_<type>_metadata()`;
 #'   `set_selected_<type>(rows)`; `get_<type>_selection()`;
-#'   `get_aggregated_<type>_data()`; plus `get_<type>_select_signal()` (file paths
-#'   a selector should select, fired by upload auto-select) and `get_active_type()`
-#'   (the type whose tab to activate after an auto-select).
+#'   `get_aggregated_<type>_data()` (with `ratio_name`/`ratio` columns added by
+#'   [isoreader2::ir_calculate_ratios()]); `get_<type>_has_ratios()`; plus
+#'   `get_<type>_select_signal()` (file paths a selector should select, fired by
+#'   upload auto-select) and `get_active_type()` (the type whose tab to activate
+#'   after an auto-select).
 #' @export
 ie_file_server <- function(
   id,
@@ -280,6 +282,35 @@ ie_file_server <- function(
     scans_data_agg <- data_agg_for(scans_isofiles, "scans")
     cf_data_agg <- data_agg_for(cf_isofiles, "continuous flow")
     di_data_agg <- data_agg_for(di_isofiles, "dual inlet")
+
+    # add `ratio_name`/`ratio` columns to the full aggregated data so the plots can
+    # offer ratio traces. Computed on the whole aggregated set (not per increment)
+    # to match the generated code, which calls ir_calculate_ratios() once after
+    # ir_aggregate_isofiles(); ratios are dimensionless, so units don't affect them.
+    # Falls back to the un-ratioed data if the calculation is not applicable.
+    with_ratios <- function(get_agg) {
+      reactive({
+        agg <- get_agg()
+        if (is.null(agg)) {
+          return(NULL)
+        }
+        out <- isoreader2::ir_calculate_ratios(agg) |> try_catch_cnds()
+        out |> log_cnds(ns = ns)
+        out$result %||% agg
+      })
+    }
+    scans_data_with_ratios <- with_ratios(scans_data_agg)
+    cf_data_with_ratios <- with_ratios(cf_data_agg)
+    di_data_with_ratios <- with_ratios(di_data_agg)
+
+    # whether a type's aggregated data carries any ratios (drives the generated
+    # code's ir_calculate_ratios() step)
+    has_ratios_of <- function(get_data) {
+      reactive(agg_has_ratios(get_data()))
+    }
+    get_scans_has_ratios <- has_ratios_of(scans_data_with_ratios)
+    get_cf_has_ratios <- has_ratios_of(cf_data_with_ratios)
+    get_di_has_ratios <- has_ratios_of(di_data_with_ratios)
 
     metadata_of <- function(get_agg) {
       reactive({
@@ -634,13 +665,23 @@ ie_file_server <- function(
       get_di_select_signal = reactive(select_signals$di()),
       # the type whose tab to activate after an auto-select (list(type, n))
       get_active_type = reactive(active_type()),
-      # per-type selection-filtered aggregated data for the plot modules
+      # whether each type's data has ratios (for the generated ir_calculate_ratios)
+      get_scans_has_ratios = get_scans_has_ratios,
+      get_cf_has_ratios = get_cf_has_ratios,
+      get_di_has_ratios = get_di_has_ratios,
+      # per-type selection-filtered aggregated data (with ratios) for the plots
       get_aggregated_scans_data = aggregated_for(
-        scans_data_agg,
+        scans_data_with_ratios,
         scans_selection$get
       ),
-      get_aggregated_cf_data = aggregated_for(cf_data_agg, cf_selection$get),
-      get_aggregated_di_data = aggregated_for(di_data_agg, di_selection$get)
+      get_aggregated_cf_data = aggregated_for(
+        cf_data_with_ratios,
+        cf_selection$get
+      ),
+      get_aggregated_di_data = aggregated_for(
+        di_data_with_ratios,
+        di_selection$get
+      )
     )
   })
 }

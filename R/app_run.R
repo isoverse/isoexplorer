@@ -201,22 +201,95 @@ ie_start_isofiles_server <- function(
       # finds files in the "data" folder; selectors drive which files/analyses the
       # plot step filters to)
       ie_cf_metadata_server("cf_meta", file)
-      code$register("cf_read", "Read data files", code_read_step("ir_find_continuous_flow", file$get_examples_loaded, file$get_uploads_loaded, examples_folder, upload_folder), group = "Continuous Flow")
-      code$register("cf_agg", "Aggregate data files", code_aggregate_step(file$get_units, "cf_data"), depends_on = "cf_read", group = "Continuous Flow")
+      code$register(
+        "cf_read",
+        "Read data files",
+        code_read_step(
+          "ir_find_continuous_flow",
+          file$get_examples_loaded,
+          file$get_uploads_loaded,
+          examples_folder,
+          upload_folder
+        ),
+        group = "Continuous Flow"
+      )
+      code$register(
+        "cf_agg",
+        "Aggregate data files",
+        code_aggregate_step(file$get_units, "cf_data", file$get_cf_has_ratios),
+        depends_on = "cf_read",
+        group = "Continuous Flow"
+      )
       cf_plot <- ie_cf_plot_server("cf", file)
-      code$register("cf_plot", "Plot continuous flow", cf_plot$get_code, depends_on = "cf_agg", group = "Continuous Flow")
+      code$register(
+        "cf_plot",
+        "Plot continuous flow",
+        cf_plot$get_code,
+        depends_on = "cf_agg",
+        group = "Continuous Flow"
+      )
 
       ie_di_metadata_server("di_meta", file)
-      code$register("di_read", "Read data files", code_read_step("ir_find_dual_inlet", file$get_examples_loaded, file$get_uploads_loaded, examples_folder, upload_folder), group = "Dual Inlet")
-      code$register("di_agg", "Aggregate data files", code_aggregate_step(file$get_units, "di_data"), depends_on = "di_read", group = "Dual Inlet")
+      code$register(
+        "di_read",
+        "Read data files",
+        code_read_step(
+          "ir_find_dual_inlet",
+          file$get_examples_loaded,
+          file$get_uploads_loaded,
+          examples_folder,
+          upload_folder
+        ),
+        group = "Dual Inlet"
+      )
+      code$register(
+        "di_agg",
+        "Aggregate data files",
+        code_aggregate_step(file$get_units, "di_data", file$get_di_has_ratios),
+        depends_on = "di_read",
+        group = "Dual Inlet"
+      )
       di_plot <- ie_di_plot_server("di", file)
-      code$register("di_plot", "Plot dual inlet", di_plot$get_code, depends_on = "di_agg", group = "Dual Inlet")
+      code$register(
+        "di_plot",
+        "Plot dual inlet",
+        di_plot$get_code,
+        depends_on = "di_agg",
+        group = "Dual Inlet"
+      )
 
       ie_scans_metadata_server("scans_meta", file)
-      code$register("scans_read", "Read data files", code_read_step("ir_find_scans", file$get_examples_loaded, file$get_uploads_loaded, examples_folder, upload_folder), group = "Scans")
-      code$register("scans_agg", "Aggregate data files", code_aggregate_step(file$get_units, "scans_data"), depends_on = "scans_read", group = "Scans")
+      code$register(
+        "scans_read",
+        "Read data files",
+        code_read_step(
+          "ir_find_scans",
+          file$get_examples_loaded,
+          file$get_uploads_loaded,
+          examples_folder,
+          upload_folder
+        ),
+        group = "Scans"
+      )
+      code$register(
+        "scans_agg",
+        "Aggregate data files",
+        code_aggregate_step(
+          file$get_units,
+          "scans_data",
+          file$get_scans_has_ratios
+        ),
+        depends_on = "scans_read",
+        group = "Scans"
+      )
       scans_plot <- ie_scans_plot_server("scans", file)
-      code$register("scans_plot", "Plot scans", scans_plot$get_code, depends_on = "scans_agg", group = "Scans")
+      code$register(
+        "scans_plot",
+        "Plot scans",
+        scans_plot$get_code,
+        depends_on = "scans_agg",
+        group = "Scans"
+      )
       # after an upload auto-select, switch to that measurement type's tab
       tab_titles <- c(
         scans = "Scans",
@@ -300,9 +373,24 @@ ie_explore_continuous_flow <- function(
     main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
     setup_modules = function(file, code) {
       ie_cf_metadata_server("cf_meta", file)
-      code$register("cf_agg", "Aggregate data files", code_object_aggregate_step(obj_name, cf_filter, file$get_units, "cf_data"))
+      code$register(
+        "cf_agg",
+        "Aggregate data files",
+        code_object_aggregate_step(
+          obj_name,
+          cf_filter,
+          file$get_units,
+          "cf_data",
+          file$get_cf_has_ratios
+        )
+      )
       cf_plot <- ie_cf_plot_server("cf", file)
-      code$register("cf_plot", "Plot continuous flow", cf_plot$get_code, depends_on = "cf_agg")
+      code$register(
+        "cf_plot",
+        "Plot continuous flow",
+        cf_plot$get_code,
+        depends_on = "cf_agg"
+      )
     },
     timezone = timezone,
     default_theme = default_theme,
@@ -352,9 +440,24 @@ ie_explore_dual_inlet <- function(
     main = ie_type_explorer_ui("di_meta", ie_di_plot_ui("di")),
     setup_modules = function(file, code) {
       ie_di_metadata_server("di_meta", file)
-      code$register("di_agg", "Aggregate data files", code_object_aggregate_step(obj_name, di_filter, file$get_units, "di_data"))
+      code$register(
+        "di_agg",
+        "Aggregate data files",
+        code_object_aggregate_step(
+          obj_name,
+          di_filter,
+          file$get_units,
+          "di_data",
+          file$get_di_has_ratios
+        )
+      )
       di_plot <- ie_di_plot_server("di", file)
-      code$register("di_plot", "Plot dual inlet", di_plot$get_code, depends_on = "di_agg")
+      code$register(
+        "di_plot",
+        "Plot dual inlet",
+        di_plot$get_code,
+        depends_on = "di_agg"
+      )
     },
     timezone = timezone,
     default_theme = default_theme,
@@ -406,9 +509,24 @@ ie_explore_scans <- function(
     main = ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans")),
     setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
-      code$register("scans_agg", "Aggregate data files", code_object_aggregate_step(obj_name, scans_filter, file$get_units, "scans_data"))
+      code$register(
+        "scans_agg",
+        "Aggregate data files",
+        code_object_aggregate_step(
+          obj_name,
+          scans_filter,
+          file$get_units,
+          "scans_data",
+          file$get_scans_has_ratios
+        )
+      )
       scans_plot <- ie_scans_plot_server("scans", file)
-      code$register("scans_plot", "Plot scans", scans_plot$get_code, depends_on = "scans_agg")
+      code$register(
+        "scans_plot",
+        "Plot scans",
+        scans_plot$get_code,
+        depends_on = "scans_agg"
+      )
     },
     timezone = timezone,
     default_theme = default_theme,
@@ -458,7 +576,16 @@ ie_explore_metadata <- function(
     main = ie_metadata_ui("scans_meta"),
     setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
-      code$register("scans_agg", "Aggregate data files", code_object_aggregate_step(obj_name, scans_filter, file$get_units, "scans_data"))
+      code$register(
+        "scans_agg",
+        "Aggregate data files",
+        code_object_aggregate_step(
+          obj_name,
+          scans_filter,
+          file$get_units,
+          "scans_data"
+        )
+      )
     },
     timezone = timezone,
     default_theme = default_theme,

@@ -24,7 +24,11 @@ plot_options_sidebar <- function(ns, extra_top = NULL, extra_options = NULL) {
       selected = "free"
     ),
     checkboxInput(ns("scientific"), "Scientific notation", value = FALSE),
-    checkboxInput(ns("drop_unused_levels"), "Drop unused levels", value = FALSE),
+    checkboxInput(
+      ns("drop_unused_levels"),
+      "Drop unused levels",
+      value = FALSE
+    ),
     extra_options,
     # styling options last
     selectInput(
@@ -171,9 +175,12 @@ setup_data_plot <- function(
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    # species the user explicitly hid via "Hide" (stays hidden until "Show" is
-    # clicked or any of its masses is (re)selected)
+    # species whose masses / ratios the user explicitly hid via "Hide" or by
+    # un-checking everything (stays hidden until "Show" is clicked or something is
+    # (re)selected). Masses and ratios are tracked independently so e.g. the ratios
+    # can stay shown while the raw-intensity masses are hidden.
     hidden <- reactiveValues()
+    hidden_ratios <- reactiveValues()
 
     # intensity units live in the file server (shared across all plots). Show its
     # current value in the popover label, push popover changes back into it, and
@@ -224,14 +231,38 @@ setup_data_plot <- function(
         logical(1)
       )]
     })
+    # "data_type" (intensity vs. ratios, added by the plot function) is offered
+    # alongside species/mass/trace and is the default facet, so intensities and
+    # ratios separate into their own panels out of the box
     output$aes_options <- renderUI({
       md <- aes_metadata()
       req(md)
-      ch <- c("species", "mass", "trace", setdiff(names(md), "file_path"))
+      ch <- c(
+        "species",
+        "mass",
+        "trace",
+        "data_type",
+        setdiff(names(md), "file_path")
+      )
       tagList(
-        selectInput(ns("facet"), "Facet by:", choices = ch, selected = isolate(input$facet) %||% "file_name"),
-        selectInput(ns("color"), "Color by:", choices = ch, selected = isolate(input$color) %||% "trace"),
-        selectInput(ns("linetype"), "Linetype by:", choices = c("(none)", ch), selected = isolate(input$linetype) %||% "(none)")
+        selectInput(
+          ns("facet"),
+          "Facet by:",
+          choices = ch,
+          selected = isolate(input$facet) %||% "data_type"
+        ),
+        selectInput(
+          ns("color"),
+          "Color by:",
+          choices = ch,
+          selected = isolate(input$color) %||% "trace"
+        ),
+        selectInput(
+          ns("linetype"),
+          "Linetype by:",
+          choices = c("(none)", ch),
+          selected = isolate(input$linetype) %||% "(none)"
+        )
       )
     })
 
@@ -269,27 +300,49 @@ setup_data_plot <- function(
       for (new_species in setdiff(g$species, done)) {
         local({
           species <- new_species
+          ratios_input <- paste0(species, "-ratios")
+          # Hide: clear both the mass and ratio checkbox groups
           observeEvent(
             input[[paste0(species, "-hide")]],
             {
-              updateCheckboxGroupInput(session, species, selected = character(0))
+              updateCheckboxGroupInput(
+                session,
+                species,
+                selected = character(0)
+              )
+              updateCheckboxGroupInput(
+                session,
+                ratios_input,
+                selected = character(0)
+              )
               hidden[[species]] <- TRUE
+              hidden_ratios[[species]] <- TRUE
             },
             ignoreInit = TRUE
           )
+          # Show: re-select every mass and every ratio for the species
           observeEvent(
             input[[paste0(species, "-show")]],
             {
               g_now <- species_masses()
+              i <- which(g_now$species == species)
               updateCheckboxGroupInput(
                 session,
                 species,
-                selected = g_now$masses[[which(g_now$species == species)]]
+                selected = g_now$masses[[i]]
+              )
+              updateCheckboxGroupInput(
+                session,
+                ratios_input,
+                selected = g_now$ratios[[i]]
               )
               hidden[[species]] <- NULL
+              hidden_ratios[[species]] <- NULL
             },
             ignoreInit = TRUE
           )
+          # track explicit emptying of the mass / ratio groups (NULL = nothing
+          # checked) so a rebuild remembers it; the two are independent
           observeEvent(
             input[[species]],
             {
@@ -302,19 +355,64 @@ setup_data_plot <- function(
             ignoreNULL = FALSE,
             ignoreInit = TRUE
           )
+          observeEvent(
+            input[[ratios_input]],
+            {
+              if (is.null(input[[ratios_input]])) {
+                hidden_ratios[[species]] <- TRUE
+              } else {
+                hidden_ratios[[species]] <- NULL
+              }
+            },
+            ignoreNULL = FALSE,
+            ignoreInit = TRUE
+          )
         })
       }
       handlers_for(union(done, g$species))
     })
 
-    # one popover button per species (Show/Hide + mass checkbox group, named by
-    # the species so input[[species]] / hidden[[species]] align)
+    # one popover button per species (Show/Hide + a mass checkbox group, plus a
+    # ratio checkbox group when ratios are available, named by the species so
+    # input[[species]] / hidden[[species]] -- and the "-ratios" variants -- align)
     output$species_buttons <- renderUI({
       g <- species_masses()
       validate(need(!is.null(g) && nrow(g) > 0, no_data_message))
       buttons <- lapply(seq_len(nrow(g)), function(i) {
         species <- g$species[i]
         species_masses_i <- g$masses[[i]]
+        species_ratios_i <- g$ratios[[i]]
+        has_ratios <- length(species_ratios_i) > 0
+        mass_group <- tagList(
+          if (has_ratios) {
+            tags$small(class = "text-muted d-block", "Masses")
+          },
+          checkboxGroupInput(
+            ns(species),
+            label = NULL,
+            choices = species_masses_i,
+            selected = if (isTRUE(isolate(hidden[[species]]))) {
+              character(0)
+            } else {
+              species_masses_i
+            }
+          )
+        )
+        ratio_group <- if (has_ratios) {
+          tagList(
+            tags$small(class = "text-muted d-block", "Ratios"),
+            checkboxGroupInput(
+              ns(paste0(species, "-ratios")),
+              label = NULL,
+              choices = species_ratios_i,
+              selected = if (isTRUE(isolate(hidden_ratios[[species]]))) {
+                character(0)
+              } else {
+                species_ratios_i
+              }
+            )
+          )
+        }
         bslib::popover(
           actionButton(
             ns(paste0(species, "-trigger")),
@@ -337,16 +435,8 @@ setup_data_plot <- function(
                 class = "btn-sm btn-outline-danger flex-fill"
               )
             ),
-            checkboxGroupInput(
-              ns(species),
-              label = NULL,
-              choices = species_masses_i,
-              selected = if (isTRUE(isolate(hidden[[species]]))) {
-                character(0)
-              } else {
-                species_masses_i
-              }
-            )
+            mass_group,
+            ratio_group
           ),
           options = list(trigger = "focus")
         )
@@ -381,6 +471,51 @@ setup_data_plot <- function(
       dplyr::bind_rows(rows)
     })
 
+    # the selected ratio names (across species), same logic as the masses: a
+    # hidden ratio group contributes nothing, an untouched one counts as all of
+    # its ratios. Species without ratios are skipped.
+    get_selected_ratios <- reactive({
+      g <- species_masses()
+      if (is.null(g) || nrow(g) == 0) {
+        return(character(0))
+      }
+      out <- character(0)
+      for (i in seq_len(nrow(g))) {
+        ratios_i <- g$ratios[[i]]
+        if (length(ratios_i) == 0) {
+          next
+        }
+        species <- g$species[i]
+        chosen <- if (isTRUE(hidden_ratios[[species]])) {
+          character(0)
+        } else {
+          input[[paste0(species, "-ratios")]] %||% ratios_i
+        }
+        out <- c(out, chosen)
+      }
+      unique(out)
+    })
+
+    # the ratio names actually passed to the plot function / generated code: the
+    # selection restricted to ratios whose numerator-mass rows survive the current
+    # mass selection (and, for scans, the scan-type filter), so the plot's `ratio=`
+    # argument never names a ratio with no data
+    get_plot_ratios <- reactive({
+      sel <- get_selected_ratios()
+      if (length(sel) == 0) {
+        return(character(0))
+      }
+      dataset <- get_data()[[dataset_key]]
+      if (is.null(dataset) || nrow(dataset) == 0) {
+        return(character(0))
+      }
+      if (!is.null(filter_dataset)) {
+        dataset <- filter_dataset(dataset)
+      }
+      filtered <- filter_by_selected_masses(dataset, get_selected_masses())
+      plottable_ratios(filtered, sel)
+    })
+
     # ZOOM (x-axis) ----
     zoom_move <- 0.5
     values <- reactiveValues(
@@ -411,7 +546,10 @@ setup_data_plot <- function(
       z <- get_last_zoom()
       if (!is.null(z$x_min) && !is.null(z$x_max)) {
         span <- (z$x_max - z$x_min) * zoom_move
-        add_to_zoom_stack(z$x_min + direction * span, z$x_max + direction * span)
+        add_to_zoom_stack(
+          z$x_min + direction * span,
+          z$x_max + direction * span
+        )
       }
     }
     observeEvent(input$zoom_move_left, move_zoom(-1))
@@ -471,7 +609,7 @@ setup_data_plot <- function(
         if (v %in% fcols) rlang::quo(factor(!!s)) else rlang::quo(!!s)
       }
       aes_args <- list(
-        facet = aes_quo(input$facet, "file_name"),
+        facet = aes_quo(input$facet, "data_type"),
         color = aes_quo(input$color, "trace")
       )
       linetype_quo <- aes_quo(input$linetype, NULL)
@@ -489,7 +627,8 @@ setup_data_plot <- function(
             font_size = input$font_size,
             scientific = input$scientific,
             legend_position = input$legend_position,
-            aes_args = aes_args
+            aes_args = aes_args,
+            selected_ratios = get_plot_ratios()
           ),
           extra
         )
@@ -559,10 +698,18 @@ setup_data_plot <- function(
         plot_args,
         select_species_or_mass(get_selected_masses(), species_masses())
       )
-      # facet / color / linetype aesthetics (only when changed from the defaults
-      # file_name / trace / none); numeric metadata columns are factor()-wrapped
+      # ratio traces (added by ir_calculate_ratios()): plotted via `ratio=`, which
+      # defaults to none in the plot functions, so it is emitted whenever any ratio
+      # is selected (all of them by default)
+      ratios <- get_plot_ratios()
+      if (length(ratios) > 0) {
+        plot_args$ratio <- ratios
+      }
+      # facet / color / linetype aesthetics (only when changed from the plot
+      # functions' defaults file_name / trace / none -- the app defaults facet to
+      # data_type); numeric metadata columns are factor()-wrapped
       fcols <- aes_factor_cols()
-      facet <- input$facet %||% "file_name"
+      facet <- input$facet %||% "data_type"
       if (!identical(facet, "file_name")) {
         plot_args$facet <- code_raw(code_aes_value(facet, fcols))
       }

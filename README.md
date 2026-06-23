@@ -81,8 +81,8 @@ from the modules currently in view, the isoreader2 code that reproduces the plot
 — read → aggregate → plot — and opens it in a read-only editor.
 
 - It is **faithful to the current state**: the intensity units, the selected
-  files/analyses (`ir_filter_metadata(...)`), the chosen species/masses, scan
-  type, zoom window, and every plot option below are reflected in the code.
+  files/analyses (`ir_filter_metadata(...)`), the chosen species/masses/ratios,
+  scan type, zoom window, and every plot option below are reflected in the code.
 - A **headings tree** on the right jumps around the document; the depth of each
   section sets its heading level (`#`, `##`, `###`).
 - Toggle between **plain R** (default) and a **Quarto** view (`” ```{r} ”` chunks),
@@ -106,12 +106,17 @@ iso_files <- ir_find_continuous_flow("data") |>
 
 ## Aggregate data files
 cf_data <- iso_files |>
-  ir_aggregate_isofiles(intensity_units = "mV")
+  ir_aggregate_isofiles(intensity_units = "mV") |>
+  ir_calculate_ratios()
 
 ### Plot continuous flow
 cf_data |>
   ir_filter_metadata(file_name == "my_run_1") |>
-  ir_plot_continuous_flow(color = factor(analysis)) +
+  ir_plot_continuous_flow(
+    ratio = c("45/44", "46/44"),
+    facet = data_type,
+    color = factor(analysis)
+  ) +
   theme(
     text = element_text(size = 14),
     legend.position = "bottom"
@@ -121,20 +126,26 @@ cf_data |>
 ## Plot options
 
 Each plot has, around the plot area, an intensity **units** popover and per-species
-**species/mass** popovers (to show/hide masses), x-axis **zoom** controls (brush to
-zoom, then pan/back/show-all), and a **PDF download**. The **Plot Options** sidebar
-adds:
+popovers (to show/hide individual **masses** and, once
+[`ir_calculate_ratios()`](https://github.com/isoverse/isoreader2) has run, the
+available isotope **ratios** — e.g. `45/44` — both checked by default), x-axis
+**zoom** controls (brush to zoom, then pan/back/show-all), and a **PDF download**.
+The **Plot Options** sidebar adds:
 
-- **Facet / Color / Linetype by** — any of `species` / `mass` / `trace` or a
-  metadata column. Numeric and date/time columns are wrapped in `factor()` when
-  used as a discrete aesthetic.
+- **Facet / Color / Linetype by** — any of `species` / `mass` / `trace` /
+  `data_type` (intensities vs. ratios) or a metadata column. Numeric and date/time
+  columns are wrapped in `factor()` when used as a discrete aesthetic. Faceting
+  defaults to `data_type`, so intensity traces and ratios land in separate panels.
 - **Scales** — facet scales (`free` / `fixed` / `free_x` / `free_y`).
 - **Scientific notation**, **Drop unused levels**, and (continuous flow only)
   **Short time labels**.
 - **Legend** position and **Font size**.
 
-De-selecting whole species (vs. individual masses) is reflected in the code as
-`species = ...` rather than `mass = ...`.
+The mass and ratio selections drive the plot functions' `mass = ...` / `ratio = ...`
+arguments in the generated code (and the aggregate step gains an
+`ir_calculate_ratios()` call whenever ratios are available); de-selecting whole
+species (vs. individual masses) is reflected as `species = ...` rather than
+`mass = ...`.
 
 ## Build your own
 

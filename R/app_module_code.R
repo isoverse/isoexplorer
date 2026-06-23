@@ -332,9 +332,12 @@ code_read_step <- function(
 
 # get_code generator for the "Aggregate data files" step: aggregate ALL read files
 # with the current intensity units into `output_var` (the plot step then subsets).
-code_aggregate_step <- function(get_units, output_var) {
+# When `get_has_ratios` is supplied and reports TRUE, an ir_calculate_ratios() step
+# is appended so the plot step's `ratio=` argument has data to draw on.
+code_aggregate_step <- function(get_units, output_var, get_has_ratios = NULL) {
   force(get_units)
   force(output_var)
+  force(get_has_ratios)
   function(input_var = NULL) {
     list(
       code = code_assign(
@@ -344,7 +347,10 @@ code_aggregate_step <- function(get_units, output_var) {
           code_call(
             "ir_aggregate_isofiles",
             list(intensity_units = get_units())
-          )
+          ),
+          if (!is.null(get_has_ratios) && isTRUE(get_has_ratios())) {
+            code_call("ir_calculate_ratios")
+          }
         )
       ),
       output = output_var
@@ -357,16 +363,19 @@ code_aggregate_step <- function(get_units, output_var) {
 # it), so aggregate it directly into `output_var`. `filter_fn` is the
 # ir_filter_for_<type> name to insert first, or NULL to omit it (the caller passes
 # NULL when the object already holds only the focused type -- no filter needed).
+# `get_has_ratios`, when supplied and TRUE, appends an ir_calculate_ratios() step.
 code_object_aggregate_step <- function(
   obj_name,
   filter_fn,
   get_units,
-  output_var
+  output_var,
+  get_has_ratios = NULL
 ) {
   force(obj_name)
   force(filter_fn)
   force(get_units)
   force(output_var)
+  force(get_has_ratios)
   function(input_var = NULL) {
     list(
       code = code_assign(
@@ -377,7 +386,10 @@ code_object_aggregate_step <- function(
           code_call(
             "ir_aggregate_isofiles",
             list(intensity_units = get_units())
-          )
+          ),
+          if (!is.null(get_has_ratios) && isTRUE(get_has_ratios())) {
+            code_call("ir_calculate_ratios")
+          }
         )
       ),
       output = output_var

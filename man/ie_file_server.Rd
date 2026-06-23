@@ -50,9 +50,11 @@ The "file handle": a list of reactive accessors / setters. For each
 \verb{<type>} in \code{scans} / \code{cf} / \code{di}: \code{get_units()}/\code{set_units(units)} (shared
 intensity units, default "mV"); \verb{get_<type>_metadata()};
 \verb{set_selected_<type>(rows)}; \verb{get_<type>_selection()};
-\verb{get_aggregated_<type>_data()}; plus \verb{get_<type>_select_signal()} (file paths
-a selector should select, fired by upload auto-select) and \code{get_active_type()}
-(the type whose tab to activate after an auto-select).
+\verb{get_aggregated_<type>_data()} (with \code{ratio_name}/\code{ratio} columns added by
+\code{\link[isoreader2:ir_calculate_ratios]{isoreader2::ir_calculate_ratios()}}); \verb{get_<type>_has_ratios()}; plus
+\verb{get_<type>_select_signal()} (file paths a selector should select, fired by
+upload auto-select) and \code{get_active_type()} (the type whose tab to activate
+after an auto-select).
 }
 \description{
 The single source of truth for the isofiles in an isoexplorer app, and the hub

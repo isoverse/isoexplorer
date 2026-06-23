@@ -94,21 +94,66 @@ extract_masses <- function(dataset) {
     )
 }
 
+# distinct ratio names (+ species) of a dataset, grouped by species and sorted by
+# numerator mass then name. `ratio_name`/`ratio` are added by
+# isoreader2::ir_calculate_ratios(); base-mass rows carry NA and are dropped here.
+# Returns a tibble with one row per species (`species`, NA if the dataset has no
+# species column) and a `ratios` list-column. An empty 0-row tibble when the
+# dataset has no `ratio_name` column or no (non-NA) ratios at all.
+extract_ratio_groups <- function(dataset) {
+  empty <- tibble::tibble(species = character(0), ratios = list())
+  if (!"ratio_name" %in% names(dataset)) {
+    return(empty)
+  }
+  rn <- dataset |>
+    dplyr::select(dplyr::any_of(c("species", "ratio_name"))) |>
+    dplyr::filter(!is.na(.data$ratio_name)) |>
+    dplyr::distinct()
+  if (nrow(rn) == 0L) {
+    return(empty)
+  }
+  if (!"species" %in% names(rn)) {
+    rn$species <- NA_character_
+  }
+  rn |>
+    dplyr::mutate(
+      .num = suppressWarnings(as.numeric(sub("/.*$", "", .data$ratio_name)))
+    ) |>
+    dplyr::arrange(.data$species, .data$.num, .data$ratio_name) |>
+    dplyr::summarise(
+      ratios = list(as.character(.data$ratio_name)),
+      .by = "species"
+    )
+}
+
 # group a dataset's masses by species for the species-button selection UI.
 # returns a tibble with one row per species: `species` (chr, NA if the dataset
-# has no species column) and `masses` (list of that species' mass values as
-# character, sorted numerically). Species are ordered alphabetically.
+# has no species column), `masses` (list of that species' mass values as
+# character, sorted numerically) and `ratios` (list of that species' available
+# ratio names as character, sorted by numerator mass; empty when ratios have not
+# been calculated). Species are ordered alphabetically.
 species_mass_groups <- function(dataset) {
   m <- extract_masses(dataset)
   if (!"species" %in% names(m)) {
     m$species <- NA_character_
   }
-  m |>
+  groups <- m |>
     dplyr::summarise(
       masses = list(as.character(.data$mass)),
       .by = "species"
     ) |>
     dplyr::arrange(.data$species)
+  # attach the available ratio names per species (NA-species safe lookup)
+  rg <- extract_ratio_groups(dataset)
+  groups$ratios <- lapply(groups$species, function(sp) {
+    idx <- if (is.na(sp)) {
+      which(is.na(rg$species))
+    } else {
+      which(!is.na(rg$species) & rg$species == sp)
+    }
+    if (length(idx) == 0L) character(0) else as.character(rg$ratios[[idx[1]]])
+  })
+  groups
 }
 
 # filter a dataset tibble to only the mass (+ species) rows the user selected
@@ -160,6 +205,45 @@ select_species_or_mass <- function(selected, groups) {
   }
 }
 
+# whether an aggregated-data object carries any (non-NA) ratios, i.e. whether
+# isoreader2::ir_calculate_ratios() has produced ratio names in any of its
+# traces/cycles/scans tables. Used to decide whether to offer ratio selection and
+# whether to emit ir_calculate_ratios() in the generated code.
+agg_has_ratios <- function(agg) {
+  if (is.null(agg)) {
+    return(FALSE)
+  }
+  any(vapply(
+    c("traces", "cycles", "scans"),
+    function(ds) {
+      tbl <- agg[[ds]]
+      !is.null(tbl) &&
+        "ratio_name" %in% names(tbl) &&
+        any(!is.na(tbl$ratio_name))
+    },
+    logical(1)
+  ))
+}
+
+# the subset of `selected_ratios` (ratio names like "45/44") that can actually be
+# plotted from `filtered_dataset` -- i.e. those whose numerator-mass rows survived
+# the mass selection (a ratio lives on its numerator mass row). Keeps the plot/code
+# `ratio=` argument from naming ratios with no data (which the plotting functions
+# treat as an error). Returns selection order, de-duplicated.
+plottable_ratios <- function(filtered_dataset, selected_ratios) {
+  selected_ratios <- as.character(selected_ratios)
+  if (
+    length(selected_ratios) == 0L ||
+      is.null(filtered_dataset) ||
+      !"ratio_name" %in% names(filtered_dataset)
+  ) {
+    return(character(0))
+  }
+  rn <- as.character(filtered_dataset$ratio_name)
+  present <- unique(rn[!is.na(rn)])
+  intersect(selected_ratios, present)
+}
+
 # apply (or hide) the legend on a ggplot; NULL passes through unchanged. A
 # bottom/top legend is laid out vertically (legend.direction = "vertical").
 apply_legend_position <- function(plot, position = "right") {
@@ -181,8 +265,10 @@ apply_legend_position <- function(plot, position = "right") {
 # legend. Returns NULL when there is nothing to plot (caller substitutes an empty
 # plot). `aes_args` is a named list of QUOSURES for the tidy-eval aesthetics
 # (facet/color/linetype) -- they are injected so the columns are evaluated as
-# variables, not strings. Other plot-specific extras (time_window, scan_type,
-# scales, ...) pass through via `...` as plain values.
+# variables, not strings. `selected_ratios` are the ratio names (e.g. "45/44") to
+# add as ratio traces via the plot function's `ratio=` argument (restricted with
+# plottable_ratios() to those with surviving data). Other plot-specific extras
+# (time_window, scan_type, scales, ...) pass through via `...` as plain values.
 build_data_plot <- function(
   agg_data,
   dataset_key,
@@ -192,6 +278,7 @@ build_data_plot <- function(
   scientific = FALSE,
   legend_position = "right",
   aes_args = list(),
+  selected_ratios = character(0),
   ...
 ) {
   if (is.null(agg_data)) {
@@ -207,14 +294,21 @@ build_data_plot <- function(
     return(NULL)
   }
 
-  agg_data[[dataset_key]] <- filter_by_selected_masses(dataset, selected_masses)
-  if (nrow(agg_data[[dataset_key]]) == 0) {
+  filtered <- filter_by_selected_masses(dataset, selected_masses)
+  if (nrow(filtered) == 0) {
     return(NULL)
   }
+  agg_data[[dataset_key]] <- filtered
+
+  # ratios are added as extra traces by the plot function via `ratio=`; only
+  # request those whose numerator-mass rows survived the mass selection so the
+  # call never errors on a ratio with no data
+  ratio_arg <- plottable_ratios(filtered, selected_ratios)
 
   # inject the aesthetic quosures alongside the plain-value args
   call_args <- c(
     list(agg_data, scientific = isTRUE(scientific)),
+    if (length(ratio_arg) > 0) list(ratio = ratio_arg) else list(),
     aes_args,
     list(...)
   )
