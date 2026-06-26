@@ -12,7 +12,7 @@ ie_run_app(
   default_theme = app_themes()[1],
   nav_panels = NULL,
   selected = NULL,
-  initial_selection = "all",
+  initial_selection = TRUE,
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,

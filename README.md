@@ -40,8 +40,10 @@ ie_explore_metadata(iso)   # just the selector table
 The object may be mixed-type (each explorer filters to its own type). The
 generated example code refers to the object by **the variable name you passed**,
 so `ie_explore_continuous_flow(iso)` writes code that starts from `iso`. All of
-these accept `initial_selection = "all"` (default), `"none"`, or a
-`function(metadata)` returning the rows to pre-select.
+these accept an `initial_selection` filter expression evaluated against the
+aggregated metadata: `FALSE` (the default — nothing selected), `TRUE` (everything),
+or any [dplyr::filter()] condition such as
+`ie_explore_continuous_flow(iso, initial_selection = grepl("std", file_name))`.
 
 ### Start a server that loads data at runtime
 
@@ -114,7 +116,7 @@ cf_data |>
   ir_filter_metadata(file_name == "my_run_1") |>
   ir_plot_continuous_flow(
     ratio = c("45/44", "46/44"),
-    facet = data_type,
+    facet = file_name,
     color = factor(analysis)
   ) +
   theme(
@@ -125,25 +127,39 @@ cf_data |>
 
 ## Plot options
 
-Each plot has, around the plot area, an intensity **units** popover and per-species
-popovers (to show/hide individual **masses** and, once
-[`ir_calculate_ratios()`](https://github.com/isoverse/isoreader2) has run, the
-available isotope **ratios** — e.g. `45/44` — both checked by default), x-axis
-**zoom** controls (brush to zoom, then pan/back/show-all), and a **PDF download**.
+Each plot has, around the plot area, an intensity **units** popover, a **ratios**
+popover, per-species popovers (to show/hide individual **masses** and, once ratios
+are calculated, the available isotope **ratios** — e.g. `45/44` — both checked by
+default), x-axis **zoom** controls (brush to zoom, then pan/back/show-all), and a
+**PDF download**.
+
+The **ratios** popover controls
+[`ir_calculate_ratios()`](https://github.com/isoverse/isoreader2): a **Calculate
+ratios** toggle and, when it is on, the additive-offset options for the current
+intensity-unit family (`num_add.V`/`denom_add.V` for `V`/`mV`,
+`num_add.nA`/`denom_add.nA` for the current units, `num_add.cps`/`denom_add.cps`
+for `cps`, pre-filled with the function defaults) plus a **Normalize** toggle
+(normalizes each ratio group by its `median`). Edits are staged: nothing takes
+effect until you click **Apply** (green); **Cancel** (gray) discards them and the
+popover reopens at the active settings.
+
 The **Plot Options** sidebar adds:
 
-- **Facet / Color / Linetype by** — any of `species` / `mass` / `trace` /
-  `data_type` (intensities vs. ratios) or a metadata column. Numeric and date/time
-  columns are wrapped in `factor()` when used as a discrete aesthetic. Faceting
-  defaults to `data_type`, so intensity traces and ratios land in separate panels.
+- **Facet / Color / Linetype by** — `(none)` or any of `species` / `mass` /
+  `trace` / `data_type` (intensities vs. ratios) or a metadata column. Numeric and
+  date/time columns are wrapped in `factor()` when used as a discrete aesthetic.
+  Faceting defaults to `file_name`; intensities and ratios are split into separate
+  panels automatically (the plot functions facet on `data_type` whenever both are
+  present, regardless of this choice).
 - **Scales** — facet scales (`free` / `fixed` / `free_x` / `free_y`).
 - **Scientific notation**, **Drop unused levels**, and (continuous flow only)
   **Short time labels**.
 - **Legend** position and **Font size**.
 
-The mass and ratio selections drive the plot functions' `mass = ...` / `ratio = ...`
-arguments in the generated code (and the aggregate step gains an
-`ir_calculate_ratios()` call whenever ratios are available); de-selecting whole
+The generated code reflects all of this: the aggregate step gains an
+`ir_calculate_ratios()` call (with only the non-default offsets / `normalize_ratios
+= mean`) when **Calculate ratios** is on, and the mass/ratio selections drive the
+plot functions' `mass = ...` / `ratio = ...` arguments — while de-selecting whole
 species (vs. individual masses) is reflected as `species = ...` rather than
 `mass = ...`.
 

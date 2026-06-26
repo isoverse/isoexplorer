@@ -14,7 +14,7 @@ ie_explore_continuous_flow(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = FALSE
 )
 
 ie_explore_dual_inlet(
@@ -24,7 +24,7 @@ ie_explore_dual_inlet(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = FALSE
 )
 
 ie_explore_scans(
@@ -34,7 +34,7 @@ ie_explore_scans(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = FALSE
 )
 
 ie_explore_metadata(
@@ -43,7 +43,8 @@ ie_explore_metadata(
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url",
-  default_theme = app_themes()
+  default_theme = app_themes(),
+  initial_selection = FALSE
 )
 }
 \arguments{
@@ -69,8 +70,9 @@ for more information on bookmarking your app.}
 
 \item{default_theme}{the default bslib Bootstrap 5 theme preset}
 
-\item{initial_selection}{what is selected on load: \code{"all"} (default), \code{"none"},
-or a \verb{function(metadata)} returning the subset of rows to select}
+\item{initial_selection}{what is selected on load, as a \code{\link[dplyr:filter]{dplyr::filter()}}
+expression on the aggregated metadata: \code{FALSE} (the default) selects nothing,
+\code{TRUE} selects everything, and any other expression (e.g. \code{grepl("std", file_name)}) selects the matching files/analyses. See \code{\link[=ie_file_server]{ie_file_server()}}.}
 }
 \value{
 a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object

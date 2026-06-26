@@ -330,14 +330,33 @@ code_read_step <- function(
   }
 }
 
+# turn the resolved ir_calculate_ratios() params (from a plot module's
+# `get_ratio_calc`, see ratio_calc_params()) into the code_call for the aggregate
+# pipe, or NULL when ratios are off. The `normalize_ratios = TRUE` marker becomes
+# the bare `median` function; the additive offsets are emitted only when non-default.
+code_ratios_step <- function(get_ratio_calc) {
+  if (is.null(get_ratio_calc)) {
+    return(NULL)
+  }
+  params <- get_ratio_calc()
+  if (is.null(params)) {
+    return(NULL)
+  }
+  if (isTRUE(params$normalize_ratios)) {
+    params$normalize_ratios <- code_raw("median")
+  }
+  code_call("ir_calculate_ratios", params)
+}
+
 # get_code generator for the "Aggregate data files" step: aggregate ALL read files
 # with the current intensity units into `output_var` (the plot step then subsets).
-# When `get_has_ratios` is supplied and reports TRUE, an ir_calculate_ratios() step
-# is appended so the plot step's `ratio=` argument has data to draw on.
-code_aggregate_step <- function(get_units, output_var, get_has_ratios = NULL) {
+# When `get_ratio_calc` is supplied and the plot's Ratios popover has ratios on, a
+# matching ir_calculate_ratios() step is appended so the plot step's `ratio=`
+# argument has data to draw on.
+code_aggregate_step <- function(get_units, output_var, get_ratio_calc = NULL) {
   force(get_units)
   force(output_var)
-  force(get_has_ratios)
+  force(get_ratio_calc)
   function(input_var = NULL) {
     list(
       code = code_assign(
@@ -348,9 +367,7 @@ code_aggregate_step <- function(get_units, output_var, get_has_ratios = NULL) {
             "ir_aggregate_isofiles",
             list(intensity_units = get_units())
           ),
-          if (!is.null(get_has_ratios) && isTRUE(get_has_ratios())) {
-            code_call("ir_calculate_ratios")
-          }
+          code_ratios_step(get_ratio_calc)
         )
       ),
       output = output_var
@@ -363,19 +380,20 @@ code_aggregate_step <- function(get_units, output_var, get_has_ratios = NULL) {
 # it), so aggregate it directly into `output_var`. `filter_fn` is the
 # ir_filter_for_<type> name to insert first, or NULL to omit it (the caller passes
 # NULL when the object already holds only the focused type -- no filter needed).
-# `get_has_ratios`, when supplied and TRUE, appends an ir_calculate_ratios() step.
+# `get_ratio_calc`, when supplied and ratios are on, appends a matching
+# ir_calculate_ratios() step (see code_ratios_step()).
 code_object_aggregate_step <- function(
   obj_name,
   filter_fn,
   get_units,
   output_var,
-  get_has_ratios = NULL
+  get_ratio_calc = NULL
 ) {
   force(obj_name)
   force(filter_fn)
   force(get_units)
   force(output_var)
-  force(get_has_ratios)
+  force(get_ratio_calc)
   function(input_var = NULL) {
     list(
       code = code_assign(
@@ -387,9 +405,7 @@ code_object_aggregate_step <- function(
             "ir_aggregate_isofiles",
             list(intensity_units = get_units())
           ),
-          if (!is.null(get_has_ratios) && isTRUE(get_has_ratios())) {
-            code_call("ir_calculate_ratios")
-          }
+          code_ratios_step(get_ratio_calc)
         )
       ),
       output = output_var

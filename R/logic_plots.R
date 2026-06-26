@@ -76,6 +76,19 @@ initial_selection_row_ids <- function(table_data, selection) {
   dplyr::semi_join(table_data, keep, by = key_cols)$row_id
 }
 
+# resolve an initial-selection filter (`filter_quo`, a tidy-eval quosure) against
+# the aggregated metadata: NULL when every row matches ("all" -- the efficient
+# default path the file server treats as "no filter"), a 0-row tibble for `FALSE`
+# or an empty match ("none"), and otherwise the matching rows. NULL/empty metadata
+# yields NULL. The caller (a reactive) wraps this to catch a filter that errors.
+resolve_selection_filter <- function(metadata, filter_quo) {
+  if (is.null(metadata) || nrow(metadata) == 0) {
+    return(NULL)
+  }
+  rows <- dplyr::filter(metadata, !!filter_quo)
+  if (nrow(rows) == nrow(metadata)) NULL else rows
+}
+
 # distinct mass (+ species) rows of a dataset, sorted by mass, with a unique
 # mass_id column ("mass:species" when species is present, else "mass") that the
 # mass selector table keys on
@@ -205,24 +218,68 @@ select_species_or_mass <- function(selected, groups) {
   }
 }
 
-# whether an aggregated-data object carries any (non-NA) ratios, i.e. whether
-# isoreader2::ir_calculate_ratios() has produced ratio names in any of its
-# traces/cycles/scans tables. Used to decide whether to offer ratio selection and
-# whether to emit ir_calculate_ratios() in the generated code.
-agg_has_ratios <- function(agg) {
-  if (is.null(agg)) {
-    return(FALSE)
+# the intensity-unit family an additive-offset pair belongs to, matching
+# isoreader2::ir_calculate_ratios()'s `num_add.{V,nA,cps}` arguments: voltage
+# (V/mV) -> "V", current (A/mA/µA/nA/pA/fA) -> "nA", counts (cps) -> "cps".
+# Unknown units fall back to "V".
+intensity_unit_family <- function(units) {
+  if (is.null(units) || length(units) == 0) {
+    return("V")
   }
-  any(vapply(
-    c("traces", "cycles", "scans"),
-    function(ds) {
-      tbl <- agg[[ds]]
-      !is.null(tbl) &&
-        "ratio_name" %in% names(tbl) &&
-        any(!is.na(tbl$ratio_name))
-    },
-    logical(1)
-  ))
+  if (units %in% c("V", "mV")) {
+    "V"
+  } else if (units %in% c("A", "mA", "µA", "uA", "nA", "pA", "fA")) {
+    "nA"
+  } else if (units == "cps") {
+    "cps"
+  } else {
+    "V"
+  }
+}
+
+# the default additive offsets (numerator, denominator) for an intensity-unit
+# family, matching ir_calculate_ratios()'s defaults: voltage 100/100, current 0/0,
+# counts 0/0.
+ratio_add_defaults <- function(family) {
+  num <- if (identical(family, "V")) 100 else 0
+  c(num = num, denom = num)
+}
+
+# resolve the Ratios-popover settings + current intensity units into the arguments
+# for isoreader2::ir_calculate_ratios() (used both to compute ratios for the plot
+# and to generate the code). `settings` is a list with `calculate` (bool),
+# `normalize` (bool), and `num_add`/`denom_add` named lists keyed by family
+# ("V"/"nA"/"cps"). Returns NULL when ratios are not to be calculated; otherwise a
+# named list of ONLY the non-default arguments: `num_add.<fam>`/`denom_add.<fam>`
+# (when changed from the family default) and `normalize_ratios = TRUE` (a marker,
+# resolved to the `mean` function / `mean` code by the caller) when normalizing.
+ratio_calc_params <- function(settings, units) {
+  if (is.null(settings) || !isTRUE(settings$calculate)) {
+    return(NULL)
+  }
+  fam <- intensity_unit_family(units)
+  defaults <- ratio_add_defaults(fam)
+  params <- list()
+  num <- settings$num_add[[fam]]
+  if (
+    !is.null(num) &&
+      !is.na(num) &&
+      !identical(as.numeric(num), defaults[["num"]])
+  ) {
+    params[[paste0("num_add.", fam)]] <- as.numeric(num)
+  }
+  denom <- settings$denom_add[[fam]]
+  if (
+    !is.null(denom) &&
+      !is.na(denom) &&
+      !identical(as.numeric(denom), defaults[["denom"]])
+  ) {
+    params[[paste0("denom_add.", fam)]] <- as.numeric(denom)
+  }
+  if (isTRUE(settings$normalize)) {
+    params$normalize_ratios <- TRUE
+  }
+  params
 }
 
 # the subset of `selected_ratios` (ratio names like "45/44") that can actually be

@@ -25,9 +25,9 @@
 #' serializations such as `foo.cf.json`). Uploaded files are stored in
 #' `upload_folder` (archives unpacked), and **only the just-uploaded files are
 #' read** -- files already present in `upload_folder` when the app started are
-#' left untouched. An "Auto-select the newly uploaded files" checkbox (on by default)
-#' exclusively selects the new files in the relevant type's table and, in the full
-#' multi-tab app, switches to that type's tab.
+#' left untouched. An "Auto-select the newly uploaded files" checkbox (off by
+#' default) exclusively selects the new files in the relevant type's table and, in
+#' the full multi-tab app, switches to that type's tab.
 #'
 #' **Monitoring.** `monitoring_folders` are polled; any isofiles found there with
 #' [isoreader2::ir_find_isofiles()] (including files already present at startup)
@@ -43,9 +43,12 @@
 #'   (already read); `reactive(NULL)` is fine when files only arrive via upload /
 #'   monitoring
 #' @param initial_selection what is selected, per type, before any selector pushes
-#'   a selection. One of `"all"` (default), `"none"`, or a `function(metadata)`
-#'   called with a type's metadata tibble that returns the subset of rows to
-#'   select (e.g. `\(m) dplyr::filter(m, grepl("std", file_name))`).
+#'   a selection. An expression evaluated as a [dplyr::filter()] on the type's
+#'   aggregated metadata tibble: `TRUE` (default) selects everything, `FALSE`
+#'   selects nothing, and any other expression selects the matching rows (e.g.
+#'   `grepl("std", file_name)`). Captured via tidy evaluation, so it may reference
+#'   variables from the calling environment. Passed pre-quoted (a quosure) by the
+#'   `ie_explore_*()` / [ie_run_app()] wrappers.
 #' @param upload_folder directory where uploaded files are stored (created on
 #'   demand); `NULL` (the default) means no upload button -- set a directory path
 #'   to enable uploads.
@@ -62,24 +65,24 @@
 #'   `<type>` in `scans` / `cf` / `di`: `get_units()`/`set_units(units)` (shared
 #'   intensity units, default "mV"); `get_<type>_metadata()`;
 #'   `set_selected_<type>(rows)`; `get_<type>_selection()`;
-#'   `get_aggregated_<type>_data()` (with `ratio_name`/`ratio` columns added by
-#'   [isoreader2::ir_calculate_ratios()]); `get_<type>_has_ratios()`; plus
-#'   `get_<type>_select_signal()` (file paths a selector should select, fired by
-#'   upload auto-select) and `get_active_type()` (the type whose tab to activate
-#'   after an auto-select).
+#'   `get_aggregated_<type>_data()`; plus `get_<type>_select_signal()` (file paths
+#'   a selector should select, fired by upload auto-select) and `get_active_type()`
+#'   (the type whose tab to activate after an auto-select).
 #' @export
 ie_file_server <- function(
   id,
   get_isofiles,
-  initial_selection = "all",
+  initial_selection = TRUE,
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
   temporary_storage = FALSE
 ) {
-  if (!is.function(initial_selection)) {
-    initial_selection <- arg_match(initial_selection, c("all", "none"))
-  }
+  # `initial_selection` is a tidy-eval filter expression (TRUE = all, FALSE = none,
+  # else a dplyr::filter condition on the metadata). Capture it here; callers that
+  # already hold a quosure (app_server, the ie_explore_*/ie_run_app wrappers)
+  # forward it spliced (`!!`) so this enquo() picks up the original quosure.
+  initial_selection <- rlang::enquo(initial_selection)
   upload_folder |>
     check_arg(
       is.null(upload_folder) || is_scalar_character(upload_folder),
@@ -245,12 +248,21 @@ ie_file_server <- function(
       })
       out
     }
+    # the data-only aggregator (no metadata aggregation); built once at runtime
+    # (isoreader2 is attached by then). The metadata is aggregated separately
+    # (metadata aggregator) and re-attached below, so it is not aggregated twice.
+    data_aggregator <- data_only_aggregator()
     meta_agg_for <- function(get_subset) {
       incremental_agg(get_subset, function(iso) {
-        isoreader2::ir_aggregate_isofiles(
-          iso,
-          aggregator = "metadata",
-          show_progress = FALSE
+        withProgress(
+          message = "Aggregating metadata",
+          detail = "This may take a moment...",
+          value = 0.5,
+          isoreader2::ir_aggregate_isofiles(
+            iso,
+            aggregator = "metadata",
+            show_progress = FALSE
+          )
         )
       })
     }
@@ -267,11 +279,29 @@ ie_file_server <- function(
               get_units()
             )
           )
-          isoreader2::ir_aggregate_isofiles(
-            iso,
-            intensity_units = get_units(),
-            show_progress = FALSE
+          res <- withProgress(
+            message = paste0("Aggregating ", type_label, " data"),
+            detail = "This may take a moment...",
+            value = 0.5,
+            # data-only aggregator: metadata is re-used from the metadata
+            # aggregation (see combine_meta_data() below), not recomputed here
+            isoreader2::ir_aggregate_isofiles(
+              iso,
+              intensity_units = get_units(),
+              aggregator = data_aggregator,
+              show_progress = FALSE
+            )
           )
+          # attach a minimal uidx/file_path metadata so the result is a complete
+          # ir_aggregated_data (problem reporting + c() rely on $metadata); the full
+          # metadata is re-attached from the metadata aggregation in
+          # combine_meta_data(). uidx is assigned by file position, matching the data
+          # tables (and the metadata aggregation, which sees the same files in order)
+          res$metadata <- tibble::tibble(
+            uidx = seq_len(nrow(iso)),
+            file_path = iso$file_path
+          )
+          res
         },
         reset_key = get_units
       )
@@ -283,35 +313,6 @@ ie_file_server <- function(
     cf_data_agg <- data_agg_for(cf_isofiles, "continuous flow")
     di_data_agg <- data_agg_for(di_isofiles, "dual inlet")
 
-    # add `ratio_name`/`ratio` columns to the full aggregated data so the plots can
-    # offer ratio traces. Computed on the whole aggregated set (not per increment)
-    # to match the generated code, which calls ir_calculate_ratios() once after
-    # ir_aggregate_isofiles(); ratios are dimensionless, so units don't affect them.
-    # Falls back to the un-ratioed data if the calculation is not applicable.
-    with_ratios <- function(get_agg) {
-      reactive({
-        agg <- get_agg()
-        if (is.null(agg)) {
-          return(NULL)
-        }
-        out <- isoreader2::ir_calculate_ratios(agg) |> try_catch_cnds()
-        out |> log_cnds(ns = ns)
-        out$result %||% agg
-      })
-    }
-    scans_data_with_ratios <- with_ratios(scans_data_agg)
-    cf_data_with_ratios <- with_ratios(cf_data_agg)
-    di_data_with_ratios <- with_ratios(di_data_agg)
-
-    # whether a type's aggregated data carries any ratios (drives the generated
-    # code's ir_calculate_ratios() step)
-    has_ratios_of <- function(get_data) {
-      reactive(agg_has_ratios(get_data()))
-    }
-    get_scans_has_ratios <- has_ratios_of(scans_data_with_ratios)
-    get_cf_has_ratios <- has_ratios_of(cf_data_with_ratios)
-    get_di_has_ratios <- has_ratios_of(di_data_with_ratios)
-
     metadata_of <- function(get_agg) {
       reactive({
         a <- get_agg()
@@ -322,15 +323,39 @@ ie_file_server <- function(
     get_cf_metadata <- metadata_of(cf_meta_agg)
     get_di_metadata <- metadata_of(di_meta_agg)
 
-    # resolve the configured `initial_selection` for a type, given its metadata
-    resolve_initial_selection <- function(metadata) {
-      if (is.function(initial_selection)) {
-        if (is.null(metadata)) {
+    # attach the separately-aggregated metadata to the data-only aggregation (their
+    # uidx line up -- both aggregate the same per-type isofiles in the same order),
+    # so the plot data has the `$metadata` the plotting functions join against
+    # without the data aggregation having to recompute it
+    combine_meta_data <- function(get_data_agg, get_meta_agg) {
+      reactive({
+        d <- get_data_agg()
+        if (is.null(d)) {
           return(NULL)
         }
-        return(initial_selection(metadata))
+        m <- get_meta_agg()
+        if (!is.null(m)) {
+          d$metadata <- m$metadata
+        }
+        d
+      })
+    }
+    scans_data_full <- combine_meta_data(scans_data_agg, scans_meta_agg)
+    cf_data_full <- combine_meta_data(cf_data_agg, cf_meta_agg)
+    di_data_full <- combine_meta_data(di_data_agg, di_meta_agg)
+
+    # resolve the configured `initial_selection` filter for a type given its
+    # metadata (NULL = all, 0-row = none, else the matching rows; see
+    # resolve_selection_filter()). A filter that errors (e.g. an unknown column) is
+    # surfaced and treated as "nothing selected".
+    resolve_initial_selection <- function(metadata) {
+      out <- resolve_selection_filter(metadata, initial_selection) |>
+        try_catch_cnds()
+      out |> log_cnds(ns = ns)
+      if (nrow(out$conditions) > 0 && any(out$conditions$type == "error")) {
+        return(tibble::tibble())
       }
-      switch(initial_selection, all = NULL, none = tibble::tibble())
+      out$result
     }
 
     # per-type selection: a user override (NULL until a selector pushes something)
@@ -490,7 +515,7 @@ ie_file_server <- function(
         checkboxInput(
           ns("upload_autoselect"),
           "Auto-select the newly uploaded files",
-          value = TRUE
+          value = FALSE
         ),
         fileInput(
           ns("upload_files"),
@@ -665,23 +690,14 @@ ie_file_server <- function(
       get_di_select_signal = reactive(select_signals$di()),
       # the type whose tab to activate after an auto-select (list(type, n))
       get_active_type = reactive(active_type()),
-      # whether each type's data has ratios (for the generated ir_calculate_ratios)
-      get_scans_has_ratios = get_scans_has_ratios,
-      get_cf_has_ratios = get_cf_has_ratios,
-      get_di_has_ratios = get_di_has_ratios,
-      # per-type selection-filtered aggregated data (with ratios) for the plots
+      # per-type selection-filtered aggregated data for the plot modules (ratios,
+      # if requested, are calculated by the plot module from its Ratios popover)
       get_aggregated_scans_data = aggregated_for(
-        scans_data_with_ratios,
+        scans_data_full,
         scans_selection$get
       ),
-      get_aggregated_cf_data = aggregated_for(
-        cf_data_with_ratios,
-        cf_selection$get
-      ),
-      get_aggregated_di_data = aggregated_for(
-        di_data_with_ratios,
-        di_selection$get
-      )
+      get_aggregated_cf_data = aggregated_for(cf_data_full, cf_selection$get),
+      get_aggregated_di_data = aggregated_for(di_data_full, di_selection$get)
     )
   })
 }
@@ -696,6 +712,21 @@ ie_file_ui <- function(id) {
     uiOutput(ns("examples_button"), inline = TRUE),
     uiOutput(ns("upload_button"), inline = TRUE)
   )
+}
+
+# the "standard" isoreader2 aggregator with the metadata rules removed: only the
+# data series (traces / cycles / scans / ...), which carry their own uidx +
+# analysis keys. The file server uses this for the data aggregation so the
+# (potentially expensive) metadata aggregation is not repeated -- the metadata is
+# aggregated once with the "metadata" aggregator and re-attached to the data.
+# Requires isoreader2 to be attached (its .onAttach registers the aggregators).
+data_only_aggregator <- function() {
+  agg <- isoreader2::ir_get_aggregator("standard")
+  agg <- agg[agg$dataset != "metadata", , drop = FALSE]
+  # base subsetting drops the aggregator class/name attribute -- restore them
+  class(agg) <- unique(c("ir_aggregator", class(agg)))
+  attr(agg, "name") <- "data"
+  agg
 }
 
 # the isofile types isoreader2 can read (the `ir_find_isofiles` defaults)

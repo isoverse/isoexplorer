@@ -25,7 +25,8 @@ Imports:
     rlog,
     DT,
     ggplot2,
-    isoreader2
+    isoreader2,
+    stats
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

@@ -42,7 +42,7 @@ ie_run_app <- function(
   default_theme = app_themes()[1],
   nav_panels = NULL,
   selected = NULL,
-  initial_selection = "all",
+  initial_selection = TRUE,
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
@@ -52,6 +52,9 @@ ie_run_app <- function(
   uiPattern = "/",
   enableBookmarking = "url"
 ) {
+  # capture the initial-selection filter expression (tidy eval) to forward to the
+  # file server through app_server (see ie_file_server())
+  initial_selection <- rlang::enquo(initial_selection)
   # ensure isoreader2 is attached so .onAttach runs and registers the aggregators
   if (!"isoreader2" %in% .packages()) {
     library(isoreader2)
@@ -201,6 +204,7 @@ ie_start_isofiles_server <- function(
       # finds files in the "data" folder; selectors drive which files/analyses the
       # plot step filters to)
       ie_cf_metadata_server("cf_meta", file)
+      cf_plot <- ie_cf_plot_server("cf", file)
       code$register(
         "cf_read",
         "Read data files",
@@ -216,11 +220,10 @@ ie_start_isofiles_server <- function(
       code$register(
         "cf_agg",
         "Aggregate data files",
-        code_aggregate_step(file$get_units, "cf_data", file$get_cf_has_ratios),
+        code_aggregate_step(file$get_units, "cf_data", cf_plot$get_ratio_calc),
         depends_on = "cf_read",
         group = "Continuous Flow"
       )
-      cf_plot <- ie_cf_plot_server("cf", file)
       code$register(
         "cf_plot",
         "Plot continuous flow",
@@ -230,6 +233,7 @@ ie_start_isofiles_server <- function(
       )
 
       ie_di_metadata_server("di_meta", file)
+      di_plot <- ie_di_plot_server("di", file)
       code$register(
         "di_read",
         "Read data files",
@@ -245,11 +249,10 @@ ie_start_isofiles_server <- function(
       code$register(
         "di_agg",
         "Aggregate data files",
-        code_aggregate_step(file$get_units, "di_data", file$get_di_has_ratios),
+        code_aggregate_step(file$get_units, "di_data", di_plot$get_ratio_calc),
         depends_on = "di_read",
         group = "Dual Inlet"
       )
-      di_plot <- ie_di_plot_server("di", file)
       code$register(
         "di_plot",
         "Plot dual inlet",
@@ -259,6 +262,7 @@ ie_start_isofiles_server <- function(
       )
 
       ie_scans_metadata_server("scans_meta", file)
+      scans_plot <- ie_scans_plot_server("scans", file)
       code$register(
         "scans_read",
         "Read data files",
@@ -277,12 +281,11 @@ ie_start_isofiles_server <- function(
         code_aggregate_step(
           file$get_units,
           "scans_data",
-          file$get_scans_has_ratios
+          scans_plot$get_ratio_calc
         ),
         depends_on = "scans_read",
         group = "Scans"
       )
-      scans_plot <- ie_scans_plot_server("scans", file)
       code$register(
         "scans_plot",
         "Plot scans",
@@ -305,8 +308,8 @@ ie_start_isofiles_server <- function(
     timezone = timezone,
     default_theme = default_theme,
     # no seed data: selection is fully explicit (examples select on load, uploads
-    # follow the upload checkbox) -- no initial "select all" default applies
-    initial_selection = "none",
+    # follow the upload checkbox) -- nothing selected by default
+    initial_selection = FALSE,
     upload_folder = upload_folder,
     monitoring_folders = monitoring_folders,
     examples_folder = examples_folder,
@@ -331,8 +334,10 @@ ie_start_isofiles_server <- function(
 #' @param isofiles the `ir_isofiles` object to explore (required)
 #' @param timezone the timezone to use for datetime display
 #' @param default_theme the default bslib Bootstrap 5 theme preset
-#' @param initial_selection what is selected on load: `"all"` (default), `"none"`,
-#'   or a `function(metadata)` returning the subset of rows to select
+#' @param initial_selection what is selected on load, as a [dplyr::filter()]
+#'   expression on the aggregated metadata: `FALSE` (the default) selects nothing,
+#'   `TRUE` selects everything, and any other expression (e.g. `grepl("std",
+#'   file_name)`) selects the matching files/analyses. See [ie_file_server()].
 #' @inheritParams shiny::shinyApp
 #' @return a [shiny::shinyApp()] object
 #' @export
@@ -343,9 +348,10 @@ ie_explore_continuous_flow <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = FALSE
 ) {
   obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer continuous flow GUI",
@@ -368,11 +374,12 @@ ie_explore_continuous_flow <- function(
     isoreader2::ir_filter_for_continuous_flow,
     "ir_filter_for_continuous_flow"
   )
-  ie_run_app(
+  rlang::inject(ie_run_app(
     isofiles = isofiles,
     main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
     setup_modules = function(file, code) {
       ie_cf_metadata_server("cf_meta", file)
+      cf_plot <- ie_cf_plot_server("cf", file)
       code$register(
         "cf_agg",
         "Aggregate data files",
@@ -381,10 +388,9 @@ ie_explore_continuous_flow <- function(
           cf_filter,
           file$get_units,
           "cf_data",
-          file$get_cf_has_ratios
+          cf_plot$get_ratio_calc
         )
       )
-      cf_plot <- ie_cf_plot_server("cf", file)
       code$register(
         "cf_plot",
         "Plot continuous flow",
@@ -394,11 +400,11 @@ ie_explore_continuous_flow <- function(
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = initial_selection,
+    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  )
+  ))
 }
 
 #' @describeIn ie_explore_continuous_flow focused app for the dual inlet plot.
@@ -410,9 +416,10 @@ ie_explore_dual_inlet <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = FALSE
 ) {
   obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer dual inlet GUI",
@@ -435,11 +442,12 @@ ie_explore_dual_inlet <- function(
     isoreader2::ir_filter_for_dual_inlet,
     "ir_filter_for_dual_inlet"
   )
-  ie_run_app(
+  rlang::inject(ie_run_app(
     isofiles = isofiles,
     main = ie_type_explorer_ui("di_meta", ie_di_plot_ui("di")),
     setup_modules = function(file, code) {
       ie_di_metadata_server("di_meta", file)
+      di_plot <- ie_di_plot_server("di", file)
       code$register(
         "di_agg",
         "Aggregate data files",
@@ -448,10 +456,9 @@ ie_explore_dual_inlet <- function(
           di_filter,
           file$get_units,
           "di_data",
-          file$get_di_has_ratios
+          di_plot$get_ratio_calc
         )
       )
-      di_plot <- ie_di_plot_server("di", file)
       code$register(
         "di_plot",
         "Plot dual inlet",
@@ -461,11 +468,11 @@ ie_explore_dual_inlet <- function(
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = initial_selection,
+    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  )
+  ))
 }
 
 #' @describeIn ie_explore_continuous_flow focused app for the scans plot.
@@ -477,9 +484,10 @@ ie_explore_scans <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = "all"
+  initial_selection = FALSE
 ) {
   obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer scans GUI",
@@ -502,13 +510,14 @@ ie_explore_scans <- function(
     isoreader2::ir_filter_for_scans,
     "ir_filter_for_scans"
   )
-  ie_run_app(
+  rlang::inject(ie_run_app(
     isofiles = isofiles,
     # the selector pushes its selection into the file server; the plot pulls the
     # selection-filtered scans data back out -- they only talk via the file server
     main = ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans")),
     setup_modules = function(file, code) {
       ie_scans_metadata_server("scans_meta", file)
+      scans_plot <- ie_scans_plot_server("scans", file)
       code$register(
         "scans_agg",
         "Aggregate data files",
@@ -517,10 +526,9 @@ ie_explore_scans <- function(
           scans_filter,
           file$get_units,
           "scans_data",
-          file$get_scans_has_ratios
+          scans_plot$get_ratio_calc
         )
       )
-      scans_plot <- ie_scans_plot_server("scans", file)
       code$register(
         "scans_plot",
         "Plot scans",
@@ -530,11 +538,11 @@ ie_explore_scans <- function(
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = initial_selection,
+    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  )
+  ))
 }
 
 #' @describeIn ie_explore_continuous_flow focused app showing just the scans
@@ -546,9 +554,11 @@ ie_explore_metadata <- function(
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url",
-  default_theme = app_themes()
+  default_theme = app_themes(),
+  initial_selection = FALSE
 ) {
   obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer metadata GUI",
@@ -571,7 +581,7 @@ ie_explore_metadata <- function(
     isoreader2::ir_filter_for_scans,
     "ir_filter_for_scans"
   )
-  ie_run_app(
+  rlang::inject(ie_run_app(
     isofiles = isofiles,
     main = ie_metadata_ui("scans_meta"),
     setup_modules = function(file, code) {
@@ -589,8 +599,9 @@ ie_explore_metadata <- function(
     },
     timezone = timezone,
     default_theme = default_theme,
+    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  )
+  ))
 }

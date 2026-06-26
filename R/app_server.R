@@ -7,25 +7,28 @@
 app_server <- function(
   isofiles,
   setup_modules,
-  initial_selection = "all",
+  initial_selection = TRUE,
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
   temporary_storage = FALSE
 ) {
+  # `initial_selection` arrives as a quosure from ie_run_app(); forward it into the
+  # file server spliced (`!!`) so the file server's enquo() picks up the original
+  # tidy-eval filter expression (see ie_file_server()).
   function(input, output, session) {
     # central file management: splits the isofiles by measurement type, owns the
     # shared units + per-type selection, and provides metadata + aggregated data
     # to the other modules. Everything goes through this single instance.
-    file <- ie_file_server(
+    file <- rlang::inject(ie_file_server(
       "files",
       get_isofiles = reactive(isofiles),
-      initial_selection = initial_selection,
+      initial_selection = !!initial_selection,
       upload_folder = upload_folder,
       monitoring_folders = monitoring_folders,
       examples_folder = examples_folder,
       temporary_storage = temporary_storage
-    )
+    ))
 
     # central code generation: each measurement type registers its own read ->
     # aggregate -> plot chain in setup_modules() below. The active navbar tab (its

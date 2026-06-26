@@ -63,6 +63,49 @@ units_popover <- function(ns) {
   )
 }
 
+# the ratios popover: a "Calculate ratios" toggle that, when on, reveals the
+# isoreader2::ir_calculate_ratios() options for the current intensity unit family
+# (the num/denom additive offsets, rendered server-side, plus a Normalize toggle).
+# Edits are staged: nothing takes effect until "Apply" (green) is clicked; "Cancel"
+# (gray) discards them. Sits between the units and species popovers.
+ratios_popover <- function(ns) {
+  bslib::popover(
+    actionButton(
+      ns("ratios-trigger"),
+      "Ratios",
+      icon = icon("caret-down")
+    ),
+    title = "Ratios",
+    id = ns("ratios_popover"),
+    div(
+      style = "width: 12rem;",
+      checkboxInput(ns("ratios_calculate"), "Calculate ratios", value = FALSE),
+      # the additive-offset inputs (unit-family dependent) + normalize toggle are
+      # only relevant once ratios are being calculated
+      conditionalPanel(
+        condition = "input.ratios_calculate == true",
+        ns = ns,
+        uiOutput(ns("ratios_params")),
+        checkboxInput(ns("ratios_normalize"), "Normalize", value = FALSE)
+      ),
+      div(
+        class = "d-flex gap-1 mt-2",
+        actionButton(
+          ns("ratios_apply"),
+          "Apply",
+          class = "btn-sm btn-success flex-fill"
+        ),
+        actionButton(
+          ns("ratios_cancel"),
+          "Cancel",
+          class = "btn-sm btn-secondary flex-fill"
+        )
+      )
+    ),
+    options = list(trigger = "focus")
+  )
+}
+
 # the centered x-axis zoom controls (show all / move left / move right / back)
 zoom_controls <- function(ns) {
   div(
@@ -110,6 +153,7 @@ data_plot_view_ui <- function(id, extra_left = NULL, extra_options = NULL) {
           class = "d-flex flex-wrap align-items-center gap-2",
           style = "flex: 1 1 0;",
           units_popover(ns),
+          ratios_popover(ns),
           extra_left,
           uiOutput(ns("species_buttons"))
         ),
@@ -153,7 +197,7 @@ data_plot_view_ui <- function(id, extra_left = NULL, extra_options = NULL) {
 # `list(plot_args = <reactive list spliced into plot_fn>, filter_dataset =
 # <optional function(dataset) restricting the species/mass options>)`; it may
 # also set up extra outputs (e.g. the scans scan-type UI). `zoom_arg` is the name
-# of `plot_fn`'s x-window argument (cf "time_window", di "cycle_window", scans
+# of `plot_fn`'s x-window argument (cf "time_window.s", di "cycle_window", scans
 # "x_window"); when set, the zoom window is passed there (filters + rescales y).
 # When NULL, zoom falls back to a post-hoc `coord_cartesian(xlim=)`, which zooms
 # the view but does NOT rescale y (so it keeps the full y-range, incl. 0).
@@ -202,6 +246,119 @@ setup_data_plot <- function(
     get_extra_plot_args <- extra$plot_args %||% reactive(list())
     filter_dataset <- extra$filter_dataset
 
+    # RATIOS popover ----
+    # the APPLIED ratio settings (only these drive the plot + code; the popover's
+    # live inputs are a staged draft committed on "Apply"). Additive offsets are
+    # kept per intensity-unit family so switching units preserves each family's
+    # configuration. Defaults match isoreader2::ir_calculate_ratios().
+    ratio_settings <- reactiveVal(list(
+      calculate = FALSE,
+      normalize = FALSE,
+      num_add = list(V = 100, nA = 0, cps = 0),
+      denom_add = list(V = 100, nA = 0, cps = 0)
+    ))
+
+    # the additive-offset inputs for the current intensity unit family (V/nA/cps),
+    # pre-filled from the applied settings (isolated; the reset-on-open observer
+    # below keeps the draft in sync without rebuilding the inputs)
+    output$ratios_params <- renderUI({
+      fam <- intensity_unit_family(get_units())
+      s <- isolate(ratio_settings())
+      defaults <- ratio_add_defaults(fam)
+      tagList(
+        numericInput(
+          ns("ratios_num_add"),
+          sprintf("num_add.%s", fam),
+          value = s$num_add[[fam]] %||% defaults[["num"]],
+          step = 1
+        ),
+        numericInput(
+          ns("ratios_denom_add"),
+          sprintf("denom_add.%s", fam),
+          value = s$denom_add[[fam]] %||% defaults[["denom"]],
+          step = 1
+        )
+      )
+    })
+
+    # reset the popover's draft inputs back to the applied settings (run when the
+    # popover (re)opens and on "Cancel", so un-applied edits never linger)
+    reset_ratio_inputs <- function() {
+      s <- ratio_settings()
+      fam <- intensity_unit_family(get_units())
+      updateCheckboxInput(
+        session,
+        "ratios_calculate",
+        value = isTRUE(s$calculate)
+      )
+      updateCheckboxInput(
+        session,
+        "ratios_normalize",
+        value = isTRUE(s$normalize)
+      )
+      updateNumericInput(session, "ratios_num_add", value = s$num_add[[fam]])
+      updateNumericInput(
+        session,
+        "ratios_denom_add",
+        value = s$denom_add[[fam]]
+      )
+    }
+    observeEvent(input[["ratios-trigger"]], reset_ratio_inputs())
+    observeEvent(input$ratios_cancel, {
+      reset_ratio_inputs()
+      bslib::toggle_popover("ratios_popover", show = FALSE)
+    })
+    # Apply: commit the draft inputs into the applied settings (only the current
+    # unit family's offsets are touched; the others keep their values)
+    observeEvent(input$ratios_apply, {
+      s <- ratio_settings()
+      fam <- intensity_unit_family(get_units())
+      s$calculate <- isTRUE(input$ratios_calculate)
+      s$normalize <- isTRUE(input$ratios_normalize)
+      if (!is.null(input$ratios_num_add) && !is.na(input$ratios_num_add)) {
+        s$num_add[[fam]] <- input$ratios_num_add
+      }
+      if (!is.null(input$ratios_denom_add) && !is.na(input$ratios_denom_add)) {
+        s$denom_add[[fam]] <- input$ratios_denom_add
+      }
+      ratio_settings(s)
+      bslib::toggle_popover("ratios_popover", show = FALSE)
+    })
+
+    # the ir_calculate_ratios() arguments for the applied settings + current units
+    # (NULL when ratios are off); used to compute ratios for the plot and to drive
+    # the generated aggregate step
+    get_ratio_calc <- reactive(ratio_calc_params(ratio_settings(), get_units()))
+
+    # the aggregated data the plot works on: the file server's data plus, when the
+    # Ratios popover requests it, the ir_calculate_ratios() `ratio_name`/`ratio`
+    # columns (computed with the applied offsets/normalization for the current units)
+    get_ratio_data <- reactive({
+      agg <- get_data()
+      if (is.null(agg)) {
+        return(NULL)
+      }
+      params <- get_ratio_calc()
+      if (is.null(params)) {
+        return(agg)
+      }
+      if (isTRUE(params$normalize_ratios)) {
+        params$normalize_ratios <- stats::median
+      }
+      # call as a normal isoreader2:: call (not do.call on the function value, which
+      # makes isoreader2's progress message deparse the whole function definition);
+      # sit at 50% so the user sees the (potentially slow) calculation is running
+      out <- withProgress(
+        message = "Calculating ratios",
+        detail = "This may take a moment...",
+        value = 0.5,
+        rlang::inject(isoreader2::ir_calculate_ratios(agg, !!!params))
+      ) |>
+        try_catch_cnds()
+      out |> log_cnds(ns = ns)
+      out$result %||% agg
+    })
+
     # facet / color / linetype aesthetic dropdowns. Choices are species/mass/trace
     # plus the data's metadata columns; rendered server-side (data-dependent) and
     # only once data is loaded so the function defaults (facet=file_name,
@@ -232,8 +389,9 @@ setup_data_plot <- function(
       )]
     })
     # "data_type" (intensity vs. ratios, added by the plot function) is offered
-    # alongside species/mass/trace and is the default facet, so intensities and
-    # ratios separate into their own panels out of the box
+    # alongside species/mass/trace; faceting defaults to file_name (the plot
+    # functions split intensities/ratios into rows automatically via their
+    # data_type_as_facet = auto() option, regardless of the facet column)
     output$aes_options <- renderUI({
       md <- aes_metadata()
       req(md)
@@ -248,13 +406,13 @@ setup_data_plot <- function(
         selectInput(
           ns("facet"),
           "Facet by:",
-          choices = ch,
-          selected = isolate(input$facet) %||% "data_type"
+          choices = c("(none)", ch),
+          selected = isolate(input$facet) %||% "file_name"
         ),
         selectInput(
           ns("color"),
           "Color by:",
-          choices = ch,
+          choices = c("(none)", ch),
           selected = isolate(input$color) %||% "trace"
         ),
         selectInput(
@@ -271,7 +429,7 @@ setup_data_plot <- function(
     # popovers (a rebuild briefly leaves duplicate bound inputs). `filter_dataset`
     # (if provided) restricts the options, e.g. scans to the selected scan_type.
     species_masses_raw <- reactive({
-      dataset <- get_data()[[dataset_key]]
+      dataset <- get_ratio_data()[[dataset_key]]
       if (!is.null(filter_dataset)) {
         dataset <- filter_dataset(dataset)
       }
@@ -505,7 +663,7 @@ setup_data_plot <- function(
       if (length(sel) == 0) {
         return(character(0))
       }
-      dataset <- get_data()[[dataset_key]]
+      dataset <- get_ratio_data()[[dataset_key]]
       if (is.null(dataset) || nrow(dataset) == 0) {
         return(character(0))
       }
@@ -581,7 +739,7 @@ setup_data_plot <- function(
       z <- get_last_zoom()
       window <- if (!is.null(z$x_min)) c(z$x_min, z$x_max) else NULL
       # extra plot args (e.g. scans scan_type) plus the zoom window for plot
-      # functions that take one (cf `time_window`, di `cycle_window`, scans
+      # functions that take one (cf `time_window.s`, di `cycle_window`, scans
       # `x_window`); these filter the data and rescale y.
       extra <- get_extra_plot_args()
       if (!is.null(zoom_arg) && !is.null(window)) {
@@ -609,7 +767,7 @@ setup_data_plot <- function(
         if (v %in% fcols) rlang::quo(factor(!!s)) else rlang::quo(!!s)
       }
       aes_args <- list(
-        facet = aes_quo(input$facet, "data_type"),
+        facet = aes_quo(input$facet, "file_name"),
         color = aes_quo(input$color, "trace")
       )
       linetype_quo <- aes_quo(input$linetype, NULL)
@@ -620,13 +778,13 @@ setup_data_plot <- function(
         build_data_plot,
         c(
           list(
-            get_data(),
+            get_ratio_data(),
             dataset_key = dataset_key,
             selected_masses = get_selected_masses(),
             plot_fn = plot_fn,
-            font_size = input$font_size,
+            font_size = input$font_size %||% 16,
             scientific = input$scientific,
-            legend_position = input$legend_position,
+            legend_position = input$legend_position %||% "right",
             aes_args = aes_args,
             selected_ratios = get_plot_ratios()
           ),
@@ -705,16 +863,20 @@ setup_data_plot <- function(
       if (length(ratios) > 0) {
         plot_args$ratio <- ratios
       }
-      # facet / color / linetype aesthetics (only when changed from the plot
-      # functions' defaults file_name / trace / none -- the app defaults facet to
-      # data_type); numeric metadata columns are factor()-wrapped
+      # facet / color / linetype aesthetics; numeric metadata columns are
+      # factor()-wrapped. The plot functions default to facet = NULL (they split
+      # intensities/ratios automatically), so facet is emitted for every choice
+      # except "(none)", which matches that NULL default. color (default trace) and
+      # linetype (default none) emit only when changed; "(none)" color -> `= NULL`.
       fcols <- aes_factor_cols()
-      facet <- input$facet %||% "data_type"
-      if (!identical(facet, "file_name")) {
+      facet <- input$facet %||% "file_name"
+      if (!identical(facet, "(none)")) {
         plot_args$facet <- code_raw(code_aes_value(facet, fcols))
       }
       color <- input$color %||% "trace"
-      if (!identical(color, "trace")) {
+      if (identical(color, "(none)")) {
+        plot_args$color <- code_raw("NULL")
+      } else if (!identical(color, "trace")) {
         plot_args$color <- code_raw(code_aes_value(color, fcols))
       }
       linetype <- input$linetype %||% "(none)"
@@ -784,6 +946,8 @@ setup_data_plot <- function(
       list(code = plot_code, output = NULL)
     }
 
-    list(get_code = get_code)
+    # `get_ratio_calc` lets the (separately registered) aggregate code step emit a
+    # matching ir_calculate_ratios() call (NULL when ratios are off)
+    list(get_code = get_code, get_ratio_calc = get_ratio_calc)
   })
 }

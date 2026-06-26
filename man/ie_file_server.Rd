@@ -8,7 +8,7 @@
 ie_file_server(
   id,
   get_isofiles,
-  initial_selection = "all",
+  initial_selection = TRUE,
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
@@ -25,9 +25,12 @@ ie_file_ui(id)
 monitoring}
 
 \item{initial_selection}{what is selected, per type, before any selector pushes
-a selection. One of \code{"all"} (default), \code{"none"}, or a \verb{function(metadata)}
-called with a type's metadata tibble that returns the subset of rows to
-select (e.g. \verb{\\(m) dplyr::filter(m, grepl("std", file_name))}).}
+a selection. An expression evaluated as a \code{\link[dplyr:filter]{dplyr::filter()}} on the type's
+aggregated metadata tibble: \code{TRUE} (default) selects everything, \code{FALSE}
+selects nothing, and any other expression selects the matching rows (e.g.
+\code{grepl("std", file_name)}). Captured via tidy evaluation, so it may reference
+variables from the calling environment. Passed pre-quoted (a quosure) by the
+\verb{ie_explore_*()} / \code{\link[=ie_run_app]{ie_run_app()}} wrappers.}
 
 \item{upload_folder}{directory where uploaded files are stored (created on
 demand); \code{NULL} (the default) means no upload button -- set a directory path
@@ -50,11 +53,9 @@ The "file handle": a list of reactive accessors / setters. For each
 \verb{<type>} in \code{scans} / \code{cf} / \code{di}: \code{get_units()}/\code{set_units(units)} (shared
 intensity units, default "mV"); \verb{get_<type>_metadata()};
 \verb{set_selected_<type>(rows)}; \verb{get_<type>_selection()};
-\verb{get_aggregated_<type>_data()} (with \code{ratio_name}/\code{ratio} columns added by
-\code{\link[isoreader2:ir_calculate_ratios]{isoreader2::ir_calculate_ratios()}}); \verb{get_<type>_has_ratios()}; plus
-\verb{get_<type>_select_signal()} (file paths a selector should select, fired by
-upload auto-select) and \code{get_active_type()} (the type whose tab to activate
-after an auto-select).
+\verb{get_aggregated_<type>_data()}; plus \verb{get_<type>_select_signal()} (file paths
+a selector should select, fired by upload auto-select) and \code{get_active_type()}
+(the type whose tab to activate after an auto-select).
 }
 \description{
 The single source of truth for the isofiles in an isoexplorer app, and the hub
@@ -83,9 +84,9 @@ types isoreader2 reads, and \code{.json} -- which covers their \verb{.<type>.jso
 serializations such as \code{foo.cf.json}). Uploaded files are stored in
 \code{upload_folder} (archives unpacked), and \strong{only the just-uploaded files are
 read} -- files already present in \code{upload_folder} when the app started are
-left untouched. An "Auto-select the newly uploaded files" checkbox (on by default)
-exclusively selects the new files in the relevant type's table and, in the full
-multi-tab app, switches to that type's tab.
+left untouched. An "Auto-select the newly uploaded files" checkbox (off by
+default) exclusively selects the new files in the relevant type's table and, in
+the full multi-tab app, switches to that type's tab.
 
 \strong{Monitoring.} \code{monitoring_folders} are polled; any isofiles found there with
 \code{\link[isoreader2:ir_find_isofiles]{isoreader2::ir_find_isofiles()}} (including files already present at startup)

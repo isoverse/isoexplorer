@@ -112,6 +112,33 @@ test_that("initial_selection_row_ids reflects a selection as table row ids", {
   )
 })
 
+test_that("resolve_selection_filter maps a filter expression to a selection", {
+  md <- tibble::tibble(
+    uidx = 1:3,
+    file_name = c("std_1", "smp_1", "std_2"),
+    analysis = c(1L, 2L, 3L)
+  )
+  # TRUE -> everything matches -> NULL (the "all" sentinel)
+  expect_null(resolve_selection_filter(md, rlang::quo(TRUE)))
+  # FALSE -> nothing matches -> 0-row tibble (the "none" case)
+  none <- resolve_selection_filter(md, rlang::quo(FALSE))
+  expect_equal(nrow(none), 0L)
+  # an expression -> the matching rows
+  sub <- resolve_selection_filter(md, rlang::quo(grepl("std", file_name)))
+  expect_equal(sub$file_name, c("std_1", "std_2"))
+  # an expression matching everything still collapses to NULL ("all")
+  expect_null(resolve_selection_filter(md, rlang::quo(uidx > 0)))
+  # NULL / empty metadata -> NULL
+  expect_null(resolve_selection_filter(NULL, rlang::quo(TRUE)))
+  expect_null(resolve_selection_filter(md[0, ], rlang::quo(TRUE)))
+  # the quosure can reference variables from its environment
+  keep <- c("smp_1")
+  expect_equal(
+    resolve_selection_filter(md, rlang::quo(file_name %in% keep))$file_name,
+    "smp_1"
+  )
+})
+
 test_that("filter_by_selected_masses keeps only selected mass/species rows", {
   df <- tibble::tibble(
     mass = c("44", "45", "28"),
@@ -174,20 +201,64 @@ test_that("filter_agg_data_by_metadata filters by (uidx, analysis), guards empti
   expect_null(filter_agg_data_by_metadata(agg, sel[0L, ]))
 })
 
-test_that("agg_has_ratios detects calculated ratios in any series", {
-  expect_false(agg_has_ratios(NULL))
-  expect_false(agg_has_ratios(list(traces = tibble::tibble(mass = "44"))))
-  # a ratio_name column that is all NA does not count
-  expect_false(agg_has_ratios(list(
-    traces = tibble::tibble(mass = c("44", "45"), ratio_name = c(NA, NA))
-  )))
-  expect_true(agg_has_ratios(list(
-    traces = tibble::tibble(mass = c("44", "45"), ratio_name = c(NA, "45/44"))
-  )))
-  # any of traces / cycles / scans counts
-  expect_true(agg_has_ratios(list(
-    cycles = tibble::tibble(mass = c("28", "29"), ratio_name = c(NA, "29/28"))
-  )))
+test_that("intensity_unit_family maps units to ir_calculate_ratios offset family", {
+  expect_equal(intensity_unit_family("mV"), "V")
+  expect_equal(intensity_unit_family("V"), "V")
+  expect_equal(intensity_unit_family("nA"), "nA")
+  expect_equal(intensity_unit_family("fA"), "nA")
+  expect_equal(intensity_unit_family("A"), "nA")
+  expect_equal(intensity_unit_family("µA"), "nA")
+  expect_equal(intensity_unit_family("cps"), "cps")
+  # unknown / empty falls back to voltage
+  expect_equal(intensity_unit_family(NULL), "V")
+  expect_equal(intensity_unit_family("???"), "V")
+})
+
+test_that("ratio_add_defaults matches the ir_calculate_ratios defaults", {
+  expect_equal(ratio_add_defaults("V"), c(num = 100, denom = 100))
+  expect_equal(ratio_add_defaults("nA"), c(num = 0, denom = 0))
+  expect_equal(ratio_add_defaults("cps"), c(num = 0, denom = 0))
+})
+
+test_that("ratio_calc_params resolves settings + units to non-default args", {
+  settings <- function(...) {
+    modifyList(
+      list(
+        calculate = TRUE,
+        normalize = FALSE,
+        num_add = list(V = 100, nA = 0, cps = 0),
+        denom_add = list(V = 100, nA = 0, cps = 0)
+      ),
+      list(...)
+    )
+  }
+  # not calculating -> NULL
+  expect_null(ratio_calc_params(settings(calculate = FALSE), "mV"))
+  # calculating, all defaults -> empty arg list (ir_calculate_ratios() bare)
+  expect_equal(ratio_calc_params(settings(), "mV"), list())
+  # non-default voltage offsets are emitted with the family suffix
+  expect_equal(
+    ratio_calc_params(settings(num_add = list(V = 200, nA = 0, cps = 0)), "V"),
+    list(num_add.V = 200)
+  )
+  # only the current unit family's offsets matter
+  expect_equal(
+    ratio_calc_params(settings(num_add = list(V = 200, nA = 5, cps = 0)), "nA"),
+    list(num_add.nA = 5)
+  )
+  # both offsets + normalize marker
+  p <- ratio_calc_params(
+    settings(
+      normalize = TRUE,
+      num_add = list(V = 100, nA = 7, cps = 0),
+      denom_add = list(V = 100, nA = 3, cps = 0)
+    ),
+    "pA"
+  )
+  expect_equal(
+    p,
+    list(num_add.nA = 7, denom_add.nA = 3, normalize_ratios = TRUE)
+  )
 })
 
 test_that("plottable_ratios keeps only selected ratios with surviving data", {

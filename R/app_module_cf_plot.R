@@ -37,7 +37,7 @@ ie_cf_plot_server <- function(id, file) {
     plot_fn_name = "ir_plot_continuous_flow",
     no_data_message = "No continuous flow trace data selected/available.",
     download_basename = "continuous_flow",
-    zoom_arg = "time_window",
+    zoom_arg = "time_window.s",
     get_selection = file$get_cf_selection,
     get_all_metadata = file$get_cf_metadata
   )
