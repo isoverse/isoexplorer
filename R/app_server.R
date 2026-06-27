@@ -1,9 +1,11 @@
 # app server: instantiates the central file-management and code-generation
 # modules and wires the app-specific modules via `setup_modules(file, code)`, and
 # handles theme switching.
-# `initial_selection` ("all" / "none" / function(metadata)) sets what is selected
-# on load; `upload_folder` controls the navbar upload button; `monitoring_folders`
-# lists folders to watch (all passed through to the file server).
+# `initial_selection` is a tidy-eval filter expression for the default selection;
+# `upload_folder` controls the navbar upload button; `monitoring_folders` lists
+# folders to watch (all passed through to the file server). `stop_on_close` stops
+# the running app when the browser disconnects (used by the detached explorers so
+# the separate process exits when the user closes the tab).
 app_server <- function(
   isofiles,
   setup_modules,
@@ -11,12 +13,17 @@ app_server <- function(
   upload_folder = NULL,
   monitoring_folders = NULL,
   examples_folder = NULL,
-  temporary_storage = FALSE
+  temporary_storage = FALSE,
+  stop_on_close = FALSE
 ) {
   # `initial_selection` arrives as a quosure from ie_run_app(); forward it into the
   # file server spliced (`!!`) so the file server's enquo() picks up the original
   # tidy-eval filter expression (see ie_file_server()).
   function(input, output, session) {
+    # stop the app (and thus a detached process) when the browser disconnects
+    if (isTRUE(stop_on_close)) {
+      session$onSessionEnded(function() shiny::stopApp())
+    }
     # central file management: splits the isofiles by measurement type, owns the
     # shared units + per-type selection, and provides metadata + aggregated data
     # to the other modules. Everything goes through this single instance.

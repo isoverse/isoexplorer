@@ -14,7 +14,10 @@ ie_explore_continuous_flow(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 )
 
 ie_explore_dual_inlet(
@@ -24,7 +27,10 @@ ie_explore_dual_inlet(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 )
 
 ie_explore_scans(
@@ -34,7 +40,10 @@ ie_explore_scans(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 )
 
 ie_explore_metadata(
@@ -44,7 +53,10 @@ ie_explore_metadata(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 )
 }
 \arguments{
@@ -72,19 +84,42 @@ for more information on bookmarking your app.}
 
 \item{initial_selection}{what is selected on load, as a \code{\link[dplyr:filter]{dplyr::filter()}}
 expression on the aggregated metadata: \code{FALSE} (the default) selects nothing,
-\code{TRUE} selects everything, and any other expression (e.g. \code{grepl("std", file_name)}) selects the matching files/analyses. See \code{\link[=ie_file_server]{ie_file_server()}}.}
+\code{TRUE} selects everything, and any other expression (e.g. \code{grepl("std", file_name)}) selects the matching files/analyses. See \code{\link[=ie_file_server]{ie_file_server()}}.
+In \code{detached} mode the expression is re-evaluated in the separate process, so
+it must be self-contained (it cannot reference variables from your session).}
+
+\item{variable_name}{the name used for the object in the generated example code.
+Defaults to the deparsed expression you passed (so \code{my_iso |> ie_explore_scans()} uses \code{"my_iso"}); set it explicitly to override.}
+
+\item{detached}{if \code{TRUE} (the default) the app is launched in a separate R
+process via \code{\link[callr:r_bg]{callr::r_bg()}} (the object is handed over in a temporary \code{.rds})
+and opened in your default browser, leaving the calling session free; closing
+the browser tab stops the app and the process is cleaned up (and killed if the
+calling session exits). If \code{FALSE}, the \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object is returned
+to run in the current session (blocking), as before.}
+
+\item{.stop_on_close}{internal; when \code{TRUE} the (non-detached) app stops itself
+when the browser disconnects. Set automatically for the detached process so it
+exits when the tab is closed; you should not need to set it.}
 }
 \value{
-a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object
+When \code{detached = TRUE}, the \code{\link[callr:r_bg]{callr::r_bg()}} process (invisibly, with the
+app URL attached as an attribute); when \code{detached = FALSE}, a
+\code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
 }
 \description{
 Focused apps for exploring an already-read \code{ir_isofiles} object one measurement
 type at a time: \code{ie_explore_continuous_flow()} / \code{ie_explore_dual_inlet()} /
 \code{ie_explore_scans()} each show that type's file-selector sidebar + plot, and
 \code{ie_explore_metadata()} shows just the selector table. The generated example
-code (navbar \strong{Show code}) refers to the object by the name you passed in.
+code (navbar \strong{Show code}) refers to the object by its \code{variable_name}.
 These take a fixed object only -- for upload / folder monitoring / load-examples
 use \code{\link[=ie_start_isofiles_server]{ie_start_isofiles_server()}}.
+}
+\details{
+By default the app runs \strong{detached} in a separate R process (see \code{detached}),
+so the calling session is not blocked, and it refuses to launch while a document
+is being rendered (knitr / Quarto), showing a message to run it interactively.
 }
 \section{Functions}{
 \itemize{

@@ -68,6 +68,12 @@ units_popover <- function(ns) {
 # (the num/denom additive offsets, rendered server-side, plus a Normalize toggle).
 # Edits are staged: nothing takes effect until "Apply" (green) is clicked; "Cancel"
 # (gray) discards them. Sits between the units and species popovers.
+#
+# It uses bslib's default "click" trigger so it stays open while the form is
+# edited and is dismissed by re-clicking the trigger, pressing Escape, or
+# Apply/Cancel (which close it server-side). A "focus" trigger -- as the units /
+# species popovers use -- would instead close the moment focus leaves the trigger,
+# i.e. on the first click inside, which breaks this multi-step form.
 ratios_popover <- function(ns) {
   bslib::popover(
     actionButton(
@@ -101,8 +107,7 @@ ratios_popover <- function(ns) {
           class = "btn-sm btn-secondary flex-fill"
         )
       )
-    ),
-    options = list(trigger = "focus")
+    )
   )
 }
 
@@ -265,16 +270,18 @@ setup_data_plot <- function(
       fam <- intensity_unit_family(get_units())
       s <- isolate(ratio_settings())
       defaults <- ratio_add_defaults(fam)
+      # the offsets are specified in the family's reference unit (V / nA / cps),
+      # shown in brackets, regardless of the actual selected intensity unit
       tagList(
         numericInput(
           ns("ratios_num_add"),
-          sprintf("num_add.%s", fam),
+          sprintf("add to numerator [%s]", fam),
           value = s$num_add[[fam]] %||% defaults[["num"]],
           step = 1
         ),
         numericInput(
           ns("ratios_denom_add"),
-          sprintf("denom_add.%s", fam),
+          sprintf("add to denominator [%s]", fam),
           value = s$denom_add[[fam]] %||% defaults[["denom"]],
           step = 1
         )
@@ -303,6 +310,10 @@ setup_data_plot <- function(
         value = s$denom_add[[fam]]
       )
     }
+    # the "click"-trigger popover opens/closes itself on the trigger button; reset
+    # the draft to the applied settings whenever the trigger is clicked (i.e. on
+    # open), and close it on Apply/Cancel (those buttons are inside the popover, so
+    # they don't dismiss it themselves)
     observeEvent(input[["ratios-trigger"]], reset_ratio_inputs())
     observeEvent(input$ratios_cancel, {
       reset_ratio_inputs()

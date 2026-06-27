@@ -37,13 +37,27 @@ ie_explore_scans(iso)
 ie_explore_metadata(iso)   # just the selector table
 ```
 
-The object may be mixed-type (each explorer filters to its own type). The
-generated example code refers to the object by **the variable name you passed**,
-so `ie_explore_continuous_flow(iso)` writes code that starts from `iso`. All of
-these accept an `initial_selection` filter expression evaluated against the
-aggregated metadata: `FALSE` (the default — nothing selected), `TRUE` (everything),
-or any [dplyr::filter()] condition such as
-`ie_explore_continuous_flow(iso, initial_selection = grepl("std", file_name))`.
+The object may be mixed-type (each explorer filters to its own type).
+
+By default these run **detached**: the app is launched in a separate R process
+(via `callr`, with the object handed over in a temporary `.rds`) and opened in your
+browser, so your R session stays free. Closing the browser tab stops the app and
+its process; the process is also killed if your R session exits, so nothing is left
+running. Pass `detached = FALSE` to instead get a [shiny::shinyApp()] you run
+(blocking) in the current session. Called **while a document is being rendered**
+(knitr / Quarto), they don't launch — they print a note to run interactively.
+
+These functions also accept:
+
+- `variable_name` — the name used for the object in the generated **Show code**
+  output. It defaults to the deparsed expression you passed, so `my_iso |>
+  ie_explore_scans()` writes code starting from `my_iso`; override it with
+  `ie_explore_scans(iso, variable_name = "special_name")`.
+- `initial_selection` — a filter expression evaluated against the aggregated
+  metadata: `FALSE` (the default — nothing selected), `TRUE` (everything), or any
+  [dplyr::filter()] condition such as
+  `ie_explore_continuous_flow(iso, initial_selection = grepl("std", file_name))`.
+  In detached mode it must be self-contained (re-evaluated in the separate process).
 
 ### Start a server that loads data at runtime
 
@@ -135,13 +149,14 @@ default), x-axis **zoom** controls (brush to zoom, then pan/back/show-all), and 
 
 The **ratios** popover controls
 [`ir_calculate_ratios()`](https://github.com/isoverse/isoreader2): a **Calculate
-ratios** toggle and, when it is on, the additive-offset options for the current
-intensity-unit family (`num_add.V`/`denom_add.V` for `V`/`mV`,
-`num_add.nA`/`denom_add.nA` for the current units, `num_add.cps`/`denom_add.cps`
-for `cps`, pre-filled with the function defaults) plus a **Normalize** toggle
-(normalizes each ratio group by its `median`). Edits are staged: nothing takes
-effect until you click **Apply** (green); **Cancel** (gray) discards them and the
-popover reopens at the active settings.
+ratios** toggle and, when it is on, the additive offsets **add to numerator** /
+**add to denominator** (in the current intensity-unit family's reference unit,
+shown in brackets — `[V]` for `V`/`mV`, `[nA]` for the current units, `[cps]` for
+`cps`; pre-filled with the function defaults and emitted as `num_add.*` /
+`denom_add.*` in the generated code) plus a **Normalize** toggle (normalizes each
+ratio group by its `median`). Edits are staged: nothing takes effect until you
+click **Apply** (green); **Cancel** (gray) discards them and the popover reopens at
+the active settings.
 
 The **Plot Options** sidebar adds:
 

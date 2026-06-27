@@ -31,6 +31,9 @@
 #'   `shiny.maxRequestSize` option for the running app. `NULL` (the default)
 #'   leaves Shiny's ~5 MB default (or a value you set yourself) untouched. Raw
 #'   isofiles are often larger than 5 MB, so raise this when enabling uploads.
+#' @param stop_on_close if `TRUE`, the app stops itself when the browser
+#'   disconnects (`session$onSessionEnded()`); used by the detached explorers so
+#'   their separate process exits when the tab is closed. Default `FALSE`.
 #' @inheritParams shiny::shinyApp
 #' @return a [shiny::shinyApp()] object
 #' @export
@@ -50,7 +53,8 @@ ie_run_app <- function(
   max_upload_size = NULL,
   options = list(),
   uiPattern = "/",
-  enableBookmarking = "url"
+  enableBookmarking = "url",
+  stop_on_close = FALSE
 ) {
   # capture the initial-selection filter expression (tidy eval) to forward to the
   # file server through app_server (see ie_file_server())
@@ -80,7 +84,8 @@ ie_run_app <- function(
     upload_folder = upload_folder,
     monitoring_folders = monitoring_folders,
     examples_folder = examples_folder,
-    temporary_storage = temporary_storage
+    temporary_storage = temporary_storage,
+    stop_on_close = stop_on_close
   )
 
   shinyApp(
@@ -166,6 +171,10 @@ ie_start_isofiles_server <- function(
   temporary_storage = FALSE,
   max_upload_size = NULL
 ) {
+  # the GUI cannot run while a document is being rendered (knitr / Quarto)
+  if (app_in_rendering()) {
+    return(app_rendering_notice("ie_start_isofiles_server"))
+  }
   log_info("\n\n========================================================")
   log_info(
     "starting isoexplorer server GUI",
@@ -327,9 +336,13 @@ ie_start_isofiles_server <- function(
 #' type at a time: `ie_explore_continuous_flow()` / `ie_explore_dual_inlet()` /
 #' `ie_explore_scans()` each show that type's file-selector sidebar + plot, and
 #' `ie_explore_metadata()` shows just the selector table. The generated example
-#' code (navbar **Show code**) refers to the object by the name you passed in.
+#' code (navbar **Show code**) refers to the object by its `variable_name`.
 #' These take a fixed object only -- for upload / folder monitoring / load-examples
 #' use [ie_start_isofiles_server()].
+#'
+#' By default the app runs **detached** in a separate R process (see `detached`),
+#' so the calling session is not blocked, and it refuses to launch while a document
+#' is being rendered (knitr / Quarto), showing a message to run it interactively.
 #'
 #' @param isofiles the `ir_isofiles` object to explore (required)
 #' @param timezone the timezone to use for datetime display
@@ -338,8 +351,24 @@ ie_start_isofiles_server <- function(
 #'   expression on the aggregated metadata: `FALSE` (the default) selects nothing,
 #'   `TRUE` selects everything, and any other expression (e.g. `grepl("std",
 #'   file_name)`) selects the matching files/analyses. See [ie_file_server()].
+#'   In `detached` mode the expression is re-evaluated in the separate process, so
+#'   it must be self-contained (it cannot reference variables from your session).
+#' @param variable_name the name used for the object in the generated example code.
+#'   Defaults to the deparsed expression you passed (so `my_iso |>
+#'   ie_explore_scans()` uses `"my_iso"`); set it explicitly to override.
+#' @param detached if `TRUE` (the default) the app is launched in a separate R
+#'   process via [callr::r_bg()] (the object is handed over in a temporary `.rds`)
+#'   and opened in your default browser, leaving the calling session free; closing
+#'   the browser tab stops the app and the process is cleaned up (and killed if the
+#'   calling session exits). If `FALSE`, the [shiny::shinyApp()] object is returned
+#'   to run in the current session (blocking), as before.
+#' @param .stop_on_close internal; when `TRUE` the (non-detached) app stops itself
+#'   when the browser disconnects. Set automatically for the detached process so it
+#'   exits when the tab is closed; you should not need to set it.
 #' @inheritParams shiny::shinyApp
-#' @return a [shiny::shinyApp()] object
+#' @return When `detached = TRUE`, the [callr::r_bg()] process (invisibly, with the
+#'   app URL attached as an attribute); when `detached = FALSE`, a
+#'   [shiny::shinyApp()] object.
 #' @export
 ie_explore_continuous_flow <- function(
   isofiles,
@@ -348,9 +377,13 @@ ie_explore_continuous_flow <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 ) {
-  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  variable_name <- variable_name %||%
+    paste(deparse(substitute(isofiles)), collapse = " ")
   initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
@@ -368,43 +401,59 @@ ie_explore_continuous_flow <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
-  # only filter-to-type in the generated code when the object is actually mixed
-  cf_filter <- app_focused_filter(
-    isofiles,
-    isoreader2::ir_filter_for_continuous_flow,
-    "ir_filter_for_continuous_flow"
-  )
-  rlang::inject(ie_run_app(
+  app_run_focused(
+    "ie_explore_continuous_flow",
     isofiles = isofiles,
-    main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
-    setup_modules = function(file, code) {
-      ie_cf_metadata_server("cf_meta", file)
-      cf_plot <- ie_cf_plot_server("cf", file)
-      code$register(
-        "cf_agg",
-        "Aggregate data files",
-        code_object_aggregate_step(
-          obj_name,
-          cf_filter,
-          file$get_units,
-          "cf_data",
-          cf_plot$get_ratio_calc
-        )
+    variable_name = variable_name,
+    initial_selection = initial_selection,
+    detached = detached,
+    stop_on_close = .stop_on_close,
+    build = function(stop_on_close) {
+      # only filter-to-type in the generated code when the object is actually mixed
+      cf_filter <- app_focused_filter(
+        isofiles,
+        isoreader2::ir_filter_for_continuous_flow,
+        "ir_filter_for_continuous_flow"
       )
-      code$register(
-        "cf_plot",
-        "Plot continuous flow",
-        cf_plot$get_code,
-        depends_on = "cf_agg"
-      )
+      rlang::inject(ie_run_app(
+        isofiles = isofiles,
+        main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
+        setup_modules = function(file, code) {
+          ie_cf_metadata_server("cf_meta", file)
+          cf_plot <- ie_cf_plot_server("cf", file)
+          code$register(
+            "cf_agg",
+            "Aggregate data files",
+            code_object_aggregate_step(
+              variable_name,
+              cf_filter,
+              file$get_units,
+              "cf_data",
+              cf_plot$get_ratio_calc
+            )
+          )
+          code$register(
+            "cf_plot",
+            "Plot continuous flow",
+            cf_plot$get_code,
+            depends_on = "cf_agg"
+          )
+        },
+        timezone = timezone,
+        default_theme = default_theme,
+        initial_selection = !!initial_selection,
+        stop_on_close = stop_on_close,
+        options = options,
+        uiPattern = uiPattern,
+        enableBookmarking = enableBookmarking
+      ))
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  ))
+  )
 }
 
 #' @describeIn ie_explore_continuous_flow focused app for the dual inlet plot.
@@ -416,9 +465,13 @@ ie_explore_dual_inlet <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 ) {
-  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  variable_name <- variable_name %||%
+    paste(deparse(substitute(isofiles)), collapse = " ")
   initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
@@ -436,43 +489,59 @@ ie_explore_dual_inlet <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
-  # only filter-to-type in the generated code when the object is actually mixed
-  di_filter <- app_focused_filter(
-    isofiles,
-    isoreader2::ir_filter_for_dual_inlet,
-    "ir_filter_for_dual_inlet"
-  )
-  rlang::inject(ie_run_app(
+  app_run_focused(
+    "ie_explore_dual_inlet",
     isofiles = isofiles,
-    main = ie_type_explorer_ui("di_meta", ie_di_plot_ui("di")),
-    setup_modules = function(file, code) {
-      ie_di_metadata_server("di_meta", file)
-      di_plot <- ie_di_plot_server("di", file)
-      code$register(
-        "di_agg",
-        "Aggregate data files",
-        code_object_aggregate_step(
-          obj_name,
-          di_filter,
-          file$get_units,
-          "di_data",
-          di_plot$get_ratio_calc
-        )
+    variable_name = variable_name,
+    initial_selection = initial_selection,
+    detached = detached,
+    stop_on_close = .stop_on_close,
+    build = function(stop_on_close) {
+      # only filter-to-type in the generated code when the object is actually mixed
+      di_filter <- app_focused_filter(
+        isofiles,
+        isoreader2::ir_filter_for_dual_inlet,
+        "ir_filter_for_dual_inlet"
       )
-      code$register(
-        "di_plot",
-        "Plot dual inlet",
-        di_plot$get_code,
-        depends_on = "di_agg"
-      )
+      rlang::inject(ie_run_app(
+        isofiles = isofiles,
+        main = ie_type_explorer_ui("di_meta", ie_di_plot_ui("di")),
+        setup_modules = function(file, code) {
+          ie_di_metadata_server("di_meta", file)
+          di_plot <- ie_di_plot_server("di", file)
+          code$register(
+            "di_agg",
+            "Aggregate data files",
+            code_object_aggregate_step(
+              variable_name,
+              di_filter,
+              file$get_units,
+              "di_data",
+              di_plot$get_ratio_calc
+            )
+          )
+          code$register(
+            "di_plot",
+            "Plot dual inlet",
+            di_plot$get_code,
+            depends_on = "di_agg"
+          )
+        },
+        timezone = timezone,
+        default_theme = default_theme,
+        initial_selection = !!initial_selection,
+        stop_on_close = stop_on_close,
+        options = options,
+        uiPattern = uiPattern,
+        enableBookmarking = enableBookmarking
+      ))
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  ))
+  )
 }
 
 #' @describeIn ie_explore_continuous_flow focused app for the scans plot.
@@ -484,9 +553,13 @@ ie_explore_scans <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 ) {
-  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  variable_name <- variable_name %||%
+    paste(deparse(substitute(isofiles)), collapse = " ")
   initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
@@ -504,45 +577,61 @@ ie_explore_scans <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
-  # only filter-to-type in the generated code when the object is actually mixed
-  scans_filter <- app_focused_filter(
-    isofiles,
-    isoreader2::ir_filter_for_scans,
-    "ir_filter_for_scans"
-  )
-  rlang::inject(ie_run_app(
+  app_run_focused(
+    "ie_explore_scans",
     isofiles = isofiles,
-    # the selector pushes its selection into the file server; the plot pulls the
-    # selection-filtered scans data back out -- they only talk via the file server
-    main = ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans")),
-    setup_modules = function(file, code) {
-      ie_scans_metadata_server("scans_meta", file)
-      scans_plot <- ie_scans_plot_server("scans", file)
-      code$register(
-        "scans_agg",
-        "Aggregate data files",
-        code_object_aggregate_step(
-          obj_name,
-          scans_filter,
-          file$get_units,
-          "scans_data",
-          scans_plot$get_ratio_calc
-        )
+    variable_name = variable_name,
+    initial_selection = initial_selection,
+    detached = detached,
+    stop_on_close = .stop_on_close,
+    build = function(stop_on_close) {
+      # only filter-to-type in the generated code when the object is actually mixed
+      scans_filter <- app_focused_filter(
+        isofiles,
+        isoreader2::ir_filter_for_scans,
+        "ir_filter_for_scans"
       )
-      code$register(
-        "scans_plot",
-        "Plot scans",
-        scans_plot$get_code,
-        depends_on = "scans_agg"
-      )
+      rlang::inject(ie_run_app(
+        isofiles = isofiles,
+        # the selector pushes its selection into the file server; the plot pulls
+        # the selection-filtered scans data back out -- only via the file server
+        main = ie_type_explorer_ui("scans_meta", ie_scans_plot_ui("scans")),
+        setup_modules = function(file, code) {
+          ie_scans_metadata_server("scans_meta", file)
+          scans_plot <- ie_scans_plot_server("scans", file)
+          code$register(
+            "scans_agg",
+            "Aggregate data files",
+            code_object_aggregate_step(
+              variable_name,
+              scans_filter,
+              file$get_units,
+              "scans_data",
+              scans_plot$get_ratio_calc
+            )
+          )
+          code$register(
+            "scans_plot",
+            "Plot scans",
+            scans_plot$get_code,
+            depends_on = "scans_agg"
+          )
+        },
+        timezone = timezone,
+        default_theme = default_theme,
+        initial_selection = !!initial_selection,
+        stop_on_close = stop_on_close,
+        options = options,
+        uiPattern = uiPattern,
+        enableBookmarking = enableBookmarking
+      ))
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  ))
+  )
 }
 
 #' @describeIn ie_explore_continuous_flow focused app showing just the scans
@@ -555,9 +644,13 @@ ie_explore_metadata <- function(
   uiPattern = "/",
   enableBookmarking = "url",
   default_theme = app_themes(),
-  initial_selection = FALSE
+  initial_selection = FALSE,
+  variable_name = NULL,
+  detached = TRUE,
+  .stop_on_close = FALSE
 ) {
-  obj_name <- paste(deparse(substitute(isofiles)), collapse = " ")
+  variable_name <- variable_name %||%
+    paste(deparse(substitute(isofiles)), collapse = " ")
   initial_selection <- rlang::enquo(initial_selection)
   log_info("\n\n========================================================")
   log_info(
@@ -575,33 +668,49 @@ ie_explore_metadata <- function(
       "must be an OlsonName"
     )
   default_theme <- arg_match(default_theme)
-  # only filter-to-type in the generated code when the object is actually mixed
-  scans_filter <- app_focused_filter(
-    isofiles,
-    isoreader2::ir_filter_for_scans,
-    "ir_filter_for_scans"
-  )
-  rlang::inject(ie_run_app(
+  app_run_focused(
+    "ie_explore_metadata",
     isofiles = isofiles,
-    main = ie_metadata_ui("scans_meta"),
-    setup_modules = function(file, code) {
-      ie_scans_metadata_server("scans_meta", file)
-      code$register(
-        "scans_agg",
-        "Aggregate data files",
-        code_object_aggregate_step(
-          obj_name,
-          scans_filter,
-          file$get_units,
-          "scans_data"
-        )
+    variable_name = variable_name,
+    initial_selection = initial_selection,
+    detached = detached,
+    stop_on_close = .stop_on_close,
+    build = function(stop_on_close) {
+      # only filter-to-type in the generated code when the object is actually mixed
+      scans_filter <- app_focused_filter(
+        isofiles,
+        isoreader2::ir_filter_for_scans,
+        "ir_filter_for_scans"
       )
+      rlang::inject(ie_run_app(
+        isofiles = isofiles,
+        main = ie_metadata_ui("scans_meta"),
+        setup_modules = function(file, code) {
+          ie_scans_metadata_server("scans_meta", file)
+          code$register(
+            "scans_agg",
+            "Aggregate data files",
+            code_object_aggregate_step(
+              variable_name,
+              scans_filter,
+              file$get_units,
+              "scans_data"
+            )
+          )
+        },
+        timezone = timezone,
+        default_theme = default_theme,
+        initial_selection = !!initial_selection,
+        stop_on_close = stop_on_close,
+        options = options,
+        uiPattern = uiPattern,
+        enableBookmarking = enableBookmarking
+      ))
     },
     timezone = timezone,
     default_theme = default_theme,
-    initial_selection = !!initial_selection,
     options = options,
     uiPattern = uiPattern,
     enableBookmarking = enableBookmarking
-  ))
+  )
 }

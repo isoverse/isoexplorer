@@ -133,3 +133,50 @@ test_that("code_object_aggregate_step threads ratio settings too", {
   expect_match(code, "ir_filter_for_dual_inlet()", fixed = TRUE)
   expect_match(code, "ir_calculate_ratios(num_add.nA = 5)", fixed = TRUE)
 })
+
+test_that("code_aggregate_step appends ir_calculate_ratios per the Ratios settings", {
+  # no ratio_calc accessor -> plain aggregate
+  step <- code_aggregate_step(function() "mV", "cf_data")
+  expect_equal(
+    step("iso_files")$code,
+    "cf_data <- iso_files |>\n  ir_aggregate_isofiles(intensity_units = \"mV\")"
+  )
+
+  # ratios off (NULL params) -> still no ir_calculate_ratios
+  step_off <- code_aggregate_step(function() "mV", "cf_data", function() NULL)
+  expect_false(grepl("ir_calculate_ratios", step_off("iso_files")$code))
+
+  # ratios on, all defaults -> bare ir_calculate_ratios()
+  step_on <- code_aggregate_step(function() "mV", "cf_data", function() list())
+  expect_match(
+    step_on("iso_files")$code,
+    "ir_aggregate_isofiles(intensity_units = \"mV\") |>\n  ir_calculate_ratios()",
+    fixed = TRUE
+  )
+
+  # non-default offsets + normalize marker -> spelled out (median as bare code)
+  step_args <- code_aggregate_step(
+    function() "mV",
+    "cf_data",
+    function() list(num_add.V = 200, normalize_ratios = TRUE)
+  )
+  expect_match(
+    step_args("iso_files")$code,
+    "ir_calculate_ratios(num_add.V = 200, normalize_ratios = median)",
+    fixed = TRUE
+  )
+})
+
+test_that("code_object_aggregate_step threads ratio settings too", {
+  step <- code_object_aggregate_step(
+    "my_iso",
+    "ir_filter_for_dual_inlet",
+    function() "nA",
+    "di_data",
+    function() list(num_add.nA = 5)
+  )
+  code <- step()$code
+  expect_match(code, "my_iso |>", fixed = TRUE)
+  expect_match(code, "ir_filter_for_dual_inlet()", fixed = TRUE)
+  expect_match(code, "ir_calculate_ratios(num_add.nA = 5)", fixed = TRUE)
+})

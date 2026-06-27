@@ -3,13 +3,7 @@
 # checked directly; the initial_selection threading is checked by driving
 # ie_file_server() the way app_server() does (read isoreader2 example files, skipped
 # when that is not possible -- e.g. the external isoextract helper is unavailable).
-
-# isoreader2 must be attached so its .onAttach registers the aggregators
-attach_isoreader2 <- function() {
-  if (!"isoreader2" %in% .packages()) {
-    suppressMessages(library(isoreader2))
-  }
-}
+# Shared helpers attach_isoreader2() / read_cf_examples() live in helper-examples.R.
 
 test_that("data_only_aggregator drops metadata but keeps the data series + keys", {
   attach_isoreader2()
@@ -27,28 +21,6 @@ test_that("data_only_aggregator drops metadata but keeps the data series + keys"
     expect_true("mass" %in% cols)
   }
 })
-
-# read the bundled continuous-flow example files, or skip the test
-read_cf_examples <- function() {
-  attach_isoreader2()
-  tmp <- tempfile("ie_examples")
-  dir.create(tmp)
-  iso <- tryCatch(
-    {
-      isoreader2::ir_copy_examples(tmp)
-      isoreader2::ir_read_isofiles(
-        isoreader2::ir_find_continuous_flow(tmp),
-        show_progress = FALSE
-      )
-    },
-    error = function(e) NULL
-  )
-  testthat::skip_if(
-    is.null(iso) || nrow(iso) == 0,
-    "no readable isoreader2 example files (isoextract not available?)"
-  )
-  iso
-}
 
 # a harness module that drives ie_file_server() exactly the way app_server() does:
 # it receives the initial_selection as a quosure value and forwards it spliced

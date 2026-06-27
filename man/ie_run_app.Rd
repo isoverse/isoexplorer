@@ -20,7 +20,8 @@ ie_run_app(
   max_upload_size = NULL,
   options = list(),
   uiPattern = "/",
-  enableBookmarking = "url"
+  enableBookmarking = "url",
+  stop_on_close = FALSE
 )
 }
 \arguments{
@@ -77,6 +78,10 @@ expression in order for the match to be considered successful.}
 \code{"disable"}. The default value, \code{NULL}, will respect the setting from
 any previous calls to  \code{\link[shiny:enableBookmarking]{enableBookmarking()}}. See \code{\link[shiny:enableBookmarking]{enableBookmarking()}}
 for more information on bookmarking your app.}
+
+\item{stop_on_close}{if \code{TRUE}, the app stops itself when the browser
+disconnects (\code{session$onSessionEnded()}); used by the detached explorers so
+their separate process exits when the tab is closed. Default \code{FALSE}.}
 }
 \value{
 a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object
