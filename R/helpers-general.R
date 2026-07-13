@@ -165,9 +165,8 @@ finish_info <- function(
   msg <-
     paste(
       if (time && !is.null(start$start_time)) {
-        format_inline(
-          "{.timestamp {prettyunits::pretty_sec(as.numeric(Sys.time() - start$start_time, 'secs'))}}"
-        )
+        elapsed <- as.numeric(Sys.time() - start$start_time, "secs")
+        format_inline("{.timestamp {secs_to_text(elapsed)}}")
       },
       if (func) format_inline("{.strong {call}()}"),
       format_inline(..., .envir = .env)
