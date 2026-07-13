@@ -16,7 +16,7 @@ ie_di_metadata_server(id, file)
 \arguments{
 \item{id}{the module id (must match the paired \code{\link[=ie_metadata_ui]{ie_metadata_ui()}})}
 
-\item{file}{the \code{\link[=ie_file_server]{ie_file_server()}} handle (for the typed wrappers)}
+\item{file}{the \code{\link[=ie_file_server]{ie_file_server()}} handle}
 }
 \value{
 a \code{\link[=ie_metadata_server]{ie_metadata_server()}} handle
@@ -25,6 +25,23 @@ a \code{\link[=ie_metadata_server]{ie_metadata_server()}} handle
 Selector-table servers wired to a \code{\link[=ie_file_server]{ie_file_server()}} for one measurement type:
 they read that type's metadata and push the selection back into the file
 server. Pair each with a \code{\link[=ie_metadata_ui]{ie_metadata_ui()}} using the same \code{id}.
+}
+\examples{
+if (interactive()) {
+  library(shiny)
+  iso <-
+    isoreader2::ir_examples_folder() |>
+    isoreader2::ir_find_isofiles() |>
+    isoreader2::ir_read_isofiles()
+
+  ui <- ie_metadata_ui("meta")
+  server <- function(input, output, session) {
+    file <- ie_file_server("files", get_isofiles = reactive(iso))
+    # pushes the table's selection into the file server for this type
+    ie_scans_metadata_server("meta", file)
+  }
+  shinyApp(ui, server)
+}
 }
 \seealso{
 \code{\link[=ie_file_server]{ie_file_server()}}, \code{\link[=ie_metadata_ui]{ie_metadata_ui()}}

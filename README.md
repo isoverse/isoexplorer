@@ -9,10 +9,15 @@ you can recombine into your own app.
 ## Installation
 
 ```r
+# install the release version from CRAN
+install.packages("isoexplorer")
+
+# or the development version from GitHub
 # install.packages("pak")
-pak::pak("isoverse/isoreader2")
-isoreader2::ir_check_isoextract()
 pak::pak("isoverse/isoexplorer")
+
+# isoreader2 relies on an external helper executable; check/install it once:
+isoreader2::ir_check_isoextract()
 ```
 
 ## Quick start
@@ -43,9 +48,11 @@ By default these run **detached**: the app is launched in a separate R process
 (via `callr`, with the object handed over in a temporary `.rds`) and opened in your
 browser, so your R session stays free. Closing the browser tab stops the app and
 its process; the process is also killed if your R session exits, so nothing is left
-running. Pass `detached = FALSE` to instead get a [shiny::shinyApp()] you run
-(blocking) in the current session. Called **while a document is being rendered**
-(knitr / Quarto), they don't launch — they print a note to run interactively.
+running. Pass `detached = FALSE` to instead run the app **in the current session**
+(blocking) with `shiny::runApp()`; add `launch = FALSE` to get the
+[shiny::shinyApp()] object back unrun (for deployment or manual launching). Called
+**while a document is being rendered** (knitr / Quarto), they don't launch — they
+print a note to run interactively.
 
 These functions also accept:
 
@@ -61,8 +68,10 @@ These functions also accept:
 
 ### Start a server that loads data at runtime
 
-`ie_start_isofiles_server()` launches the full multi-tab app (one tab per
-measurement type) with **no** `isofiles` argument. Data arrives at runtime via:
+`ie_create_isofiles_server()` builds the full multi-tab app (one tab per
+measurement type) with **no** `isofiles` argument, and returns it as a
+[shiny::shinyApp()] object to run (`shiny::runApp()`) or deploy. Data arrives at
+runtime via:
 
 - the navbar **Load examples** button (on by default — copies the isoreader2
   bundled examples with `ir_copy_examples()` and reads them),
@@ -73,8 +82,9 @@ measurement type) with **no** `isofiles` argument. Data arrives at runtime via:
   are picked up automatically.
 
 ```r
-ie_start_isofiles_server()                                           # Load examples / upload
-ie_start_isofiles_server(upload_folder = "uploads", monitoring_folders = "incoming")
+ie_create_isofiles_server() |> shiny::runApp()                       # Load examples / upload
+ie_create_isofiles_server(upload_folder = "uploads", monitoring_folders = "incoming") |>
+  shiny::runApp()
 ```
 
 Only newly seen files are ever read, so adding files is cheap. A "get started"
@@ -84,7 +94,8 @@ Shiny caps uploads at 5 MB per file by default; since raw isofiles are often
 larger, raise it with `max_upload_size` (in MB):
 
 ```r
-ie_start_isofiles_server(upload_folder = "uploads", max_upload_size = 200)
+ie_create_isofiles_server(upload_folder = "uploads", max_upload_size = 200) |>
+  shiny::runApp()
 ```
 
 Behind a reverse proxy (e.g. nginx in front of ShinyProxy) you may also need to
@@ -278,11 +289,11 @@ to one navbar tab. A `get_code` is `function(input_var = NULL)` returning
 variable of the module it depends on, and its own `output` becomes the input
 variable of its dependents (a terminal node such as a plot returns `output = NULL`).
 
-## isoverse <a href='http://www.isoverse.org'><img src='man/figures/isoverse_logo_thumb.png' align="right" width="100" alt="isoverse logo"/></a>
+## isoverse <a href='https://www.isoverse.org/'><img src='man/figures/isoverse_logo_thumb.png' align="right" width="100" alt="isoverse logo"/></a>
 
 This package is part of the isoverse suite of data tools for stable isotopes. If you like the functionality that isoverse packages provide, please help us spread the word and include an isoverse or individual package logo on one of your posters or slides. All logos are posted in high resolution in [this repository](https://github.com/isoverse/logos). If you have suggestions for new features or other constructive feedback, please let us know on this short [feeback form](https://www.isoverse.org/feedback/).
 
 ## Funding <a href='https://www.nsf.gov/'><img src='man/figures/NSF_logo.svg' align="right" width="100" alt="NSF logo"/></a>
 
-This project is supported by a grant from the US National Science Foundation ([EAR-2411458](https://www.nsf.gov/awardsearch/show-award?AWD_ID=2411458)) to Sebastian Kopf. 
+This project is supported by a grant from the US National Science Foundation ([EAR-2411458](https://www.nsf.gov/awardsearch/show-award/?AWD_ID=2411458)) to Sebastian Kopf. 
 

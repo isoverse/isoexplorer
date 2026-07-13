@@ -17,8 +17,12 @@ a \code{\link[bslib:layout_sidebar]{bslib::layout_sidebar()}} UI element
 \description{
 Convenience UI combining a left file-selector sidebar (a \code{\link[=ie_metadata_ui]{ie_metadata_ui()}}) with
 a plot to its right -- the building block each focused explorer and each tab of
-\code{\link[=ie_start_isofiles_server]{ie_start_isofiles_server()}} uses. Wire the matching \verb{*_metadata_server()} (on
+\code{\link[=ie_create_isofiles_server]{ie_create_isofiles_server()}} uses. Wire the matching \verb{*_metadata_server()} (on
 \code{meta_id}) and \verb{*_plot_server()} in your server function.
+}
+\examples{
+# a file-selector sidebar next to a scans plot (place inside a shiny UI)
+ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
 }
 \seealso{
 \code{\link[=ie_file_server]{ie_file_server()}}, \code{\link[=ie_scans_plot_ui]{ie_scans_plot_ui()}}, \code{\link[=ie_scans_metadata_server]{ie_scans_metadata_server()}}

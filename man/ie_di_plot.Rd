@@ -13,7 +13,7 @@ ie_di_plot_server(id, file)
 \arguments{
 \item{id}{the module id (must match the paired \code{\link[=ie_metadata_ui]{ie_metadata_ui()}})}
 
-\item{file}{the \code{\link[=ie_file_server]{ie_file_server()}} handle (for the typed wrappers)}
+\item{file}{the \code{\link[=ie_file_server]{ie_file_server()}} handle}
 }
 \value{
 \code{ie_di_plot_ui()} returns a UI element; \code{ie_di_plot_server()} returns a
@@ -24,6 +24,23 @@ A plot view for dual inlet cycle data, wired to a \code{\link[=ie_file_server]{i
 selection-filtered aggregated \code{cycles} with
 \code{\link[isoreader2:ir_plot_dual_inlet]{isoreader2::ir_plot_dual_inlet()}}, with unit, species/mass, legend, zoom and
 PDF-download controls. Pair \code{ie_di_plot_ui()} and \code{ie_di_plot_server()} on one \code{id}.
+}
+\examples{
+if (interactive()) {
+  library(shiny)
+  iso <-
+    isoreader2::ir_examples_folder() |>
+    isoreader2::ir_find_isofiles() |>
+    isoreader2::ir_read_isofiles()
+
+  ui <- ie_type_explorer_ui("meta", ie_di_plot_ui("di"))
+  server <- function(input, output, session) {
+    file <- ie_file_server("files", get_isofiles = reactive(iso))
+    ie_di_metadata_server("meta", file)
+    ie_di_plot_server("di", file)
+  }
+  shinyApp(ui, server)
+}
 }
 \seealso{
 \code{\link[=ie_file_server]{ie_file_server()}}, \code{\link[=ie_di_metadata_server]{ie_di_metadata_server()}}

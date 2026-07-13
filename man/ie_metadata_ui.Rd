@@ -18,6 +18,10 @@ card with a toolbar (select-all / deselect on the left, column / search
 controls on the right) above a table that fills the rest of the card. Pair it
 with one of the \verb{*_metadata_server()} functions using the same \code{id}.
 }
+\examples{
+# pair with a *_metadata_server() on the same id inside a shiny app
+ie_metadata_ui("meta")
+}
 \seealso{
 \code{\link[=ie_scans_metadata_server]{ie_scans_metadata_server()}}, \code{\link[=ie_file_server]{ie_file_server()}}
 }

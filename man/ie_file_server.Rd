@@ -104,3 +104,24 @@ launched with data never sees it.
 \code{upload_folder} is set). Pair with \code{\link[=ie_file_server]{ie_file_server()}} on the same \code{id}.
 
 }}
+\examples{
+if (interactive()) {
+  library(shiny)
+  # read the bundled isoreader2 examples for some scans data
+  iso <-
+    isoreader2::ir_examples_folder() |>
+    isoreader2::ir_find_isofiles() |>
+    isoreader2::ir_read_isofiles()
+
+  ui <- bslib::page_fillable(
+    ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
+  )
+  server <- function(input, output, session) {
+    # the hub: every other module reads/writes through this handle
+    file <- ie_file_server("files", get_isofiles = reactive(iso))
+    ie_scans_metadata_server("meta", file) # selection -> file server
+    ie_scans_plot_server("scan", file)     # file server -> plot
+  }
+  shinyApp(ui, server)
+}
+}

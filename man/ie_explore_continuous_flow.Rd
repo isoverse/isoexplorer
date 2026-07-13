@@ -17,7 +17,8 @@ ie_explore_continuous_flow(
   initial_selection = FALSE,
   variable_name = NULL,
   detached = TRUE,
-  .stop_on_close = FALSE
+  launch = TRUE,
+  log_level = "WARN"
 )
 
 ie_explore_dual_inlet(
@@ -30,7 +31,8 @@ ie_explore_dual_inlet(
   initial_selection = FALSE,
   variable_name = NULL,
   detached = TRUE,
-  .stop_on_close = FALSE
+  launch = TRUE,
+  log_level = "WARN"
 )
 
 ie_explore_scans(
@@ -43,7 +45,8 @@ ie_explore_scans(
   initial_selection = FALSE,
   variable_name = NULL,
   detached = TRUE,
-  .stop_on_close = FALSE
+  launch = TRUE,
+  log_level = "WARN"
 )
 
 ie_explore_metadata(
@@ -56,13 +59,14 @@ ie_explore_metadata(
   initial_selection = FALSE,
   variable_name = NULL,
   detached = TRUE,
-  .stop_on_close = FALSE
+  launch = TRUE,
+  log_level = "WARN"
 )
 }
 \arguments{
 \item{isofiles}{the \code{ir_isofiles} object to explore (required)}
 
-\item{timezone}{the timezone to use for datetime display}
+\item{timezone}{timezone for datetime display}
 
 \item{options}{Named options that should be passed to the \code{runApp} call
 (these can be any of the following: "port", "launch.browser", "host", "quiet",
@@ -80,7 +84,7 @@ expression in order for the match to be considered successful.}
 any previous calls to  \code{\link[shiny:enableBookmarking]{enableBookmarking()}}. See \code{\link[shiny:enableBookmarking]{enableBookmarking()}}
 for more information on bookmarking your app.}
 
-\item{default_theme}{the default bslib Bootstrap 5 theme preset}
+\item{default_theme}{default bslib Bootstrap 5 theme preset}
 
 \item{initial_selection}{what is selected on load, as a \code{\link[dplyr:filter]{dplyr::filter()}}
 expression on the aggregated metadata: \code{FALSE} (the default) selects nothing,
@@ -91,21 +95,24 @@ it must be self-contained (it cannot reference variables from your session).}
 \item{variable_name}{the name used for the object in the generated example code.
 Defaults to the deparsed expression you passed (so \code{my_iso |> ie_explore_scans()} uses \code{"my_iso"}); set it explicitly to override.}
 
-\item{detached}{if \code{TRUE} (the default) the app is launched in a separate R
-process via \code{\link[callr:r_bg]{callr::r_bg()}} (the object is handed over in a temporary \code{.rds})
-and opened in your default browser, leaving the calling session free; closing
-the browser tab stops the app and the process is cleaned up (and killed if the
-calling session exits). If \code{FALSE}, the \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object is returned
-to run in the current session (blocking), as before.}
+\item{detached}{if \code{TRUE}, the app is launched in a separate R process (via
+\code{\link[callr:r_bg]{callr::r_bg()}}, the app handed over in a temporary \code{.rds}) and opened in your
+default browser, leaving the calling session free; closing the browser tab
+stops the app and the process (which is also killed if the calling session
+exits). Default \code{FALSE}.}
 
-\item{.stop_on_close}{internal; when \code{TRUE} the (non-detached) app stops itself
-when the browser disconnects. Set automatically for the detached process so it
-exits when the tab is closed; you should not need to set it.}
+\item{launch}{only relevant when \code{detached = FALSE}: if \code{TRUE} (the default) the app is
+run in the current session (blocking) with \code{\link[shiny:runApp]{shiny::runApp()}}; if \code{FALSE} the
+\code{\link[shiny:shinyApp]{shiny::shinyApp()}} object is returned unrun (for server deployment or manual
+launching). Ignored when \code{detached = TRUE} (a detached app is always run).}
+
+\item{log_level}{how verbosely the app logs; see \code{\link[=ie_run_app]{ie_run_app()}} for the
+available levels. Defaults to \code{"WARN"} for the focused explorers.}
 }
 \value{
-When \code{detached = TRUE}, the \code{\link[callr:r_bg]{callr::r_bg()}} process (invisibly, with the
-app URL attached as an attribute); when \code{detached = FALSE}, a
-\code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
+the value of \code{\link[=ie_run_app]{ie_run_app()}} for the chosen \code{detached} / \code{launch}: the
+\code{\link[callr:r_bg]{callr::r_bg()}} process (detached), the \code{\link[shiny:runApp]{shiny::runApp()}} result (in-session
+launch), or the \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object (\code{launch = FALSE}).
 }
 \description{
 Focused apps for exploring an already-read \code{ir_isofiles} object one measurement
@@ -114,12 +121,13 @@ type at a time: \code{ie_explore_continuous_flow()} / \code{ie_explore_dual_inle
 \code{ie_explore_metadata()} shows just the selector table. The generated example
 code (navbar \strong{Show code}) refers to the object by its \code{variable_name}.
 These take a fixed object only -- for upload / folder monitoring / load-examples
-use \code{\link[=ie_start_isofiles_server]{ie_start_isofiles_server()}}.
+use \code{\link[=ie_create_isofiles_server]{ie_create_isofiles_server()}}.
 }
 \details{
 By default the app runs \strong{detached} in a separate R process (see \code{detached}),
 so the calling session is not blocked, and it refuses to launch while a document
 is being rendered (knitr / Quarto), showing a message to run it interactively.
+These are thin wrappers over \code{\link[=ie_run_app]{ie_run_app()}}, which manages \code{detached} / \code{launch}.
 }
 \section{Functions}{
 \itemize{
@@ -131,3 +139,26 @@ is being rendered (knitr / Quarto), showing a message to run it interactively.
 metadata selector table (handy for browsing/testing the selector).
 
 }}
+\examples{
+if (interactive()) {
+  # read the bundled isoreader2 examples (a mixed set of all types); each
+  # explorer filters the object to its own measurement type
+  iso <-
+    isoreader2::ir_examples_folder() |>
+    isoreader2::ir_find_isofiles() |>
+    isoreader2::ir_read_isofiles()
+
+  # each focused explorer opens the object in a detached browser app
+  ie_explore_continuous_flow(iso)
+  ie_explore_dual_inlet(iso)
+  ie_explore_scans(iso)
+  ie_explore_metadata(iso) # just the selector table
+
+  # preselect some files and run blocking in the current session instead
+  ie_explore_continuous_flow(
+    iso,
+    initial_selection = grepl("gc", file_name),
+    detached = FALSE
+  )
+}
+}

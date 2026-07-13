@@ -4,9 +4,9 @@
 \name{isoexplorer-package}
 \alias{isoexplorer}
 \alias{isoexplorer-package}
-\title{isoexplorer: GUI to Explore Stable Isotope Data Files}
+\title{isoexplorer: GUI components to Explore Stable Isotope Data Files}
 \description{
-Provides a graphical user interface to explore stable isotope data files using the isoreader2 package, including browsing, visualizing, and exporting isotope data.
+Provides graphical user interface components to explore stable isotope data files using the 'isoreader2' package, including browsing, visualizing, and exporting isotope data.
 }
 \seealso{
 Useful links:
@@ -17,11 +17,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Sebastian Kopf \email{seb.kopf@gmail.com}
+\strong{Maintainer}: Sebastian Kopf \email{sebastian.kopf@colorado.edu} (\href{https://orcid.org/0000-0002-2044-0201}{ORCID})
 
 Authors:
 \itemize{
-  \item Sebastian Kopf \email{seb.kopf@gmail.com}
+  \item Sebastian Kopf \email{sebastian.kopf@colorado.edu} (\href{https://orcid.org/0000-0002-2044-0201}{ORCID})
 }
 
 }

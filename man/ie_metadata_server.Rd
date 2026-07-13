@@ -28,8 +28,6 @@ reflect it in the table on load (e.g. \code{file$get_scans_selection})}
 \item{get_select_signal}{optional reactive carrying file paths the table should
 exclusively select (e.g. \code{file$get_scans_select_signal}, fired by upload
 auto-select); applied once the table contains those files}
-
-\item{file}{the \code{\link[=ie_file_server]{ie_file_server()}} handle (for the typed wrappers)}
 }
 \value{
 a list with the underlying selector-table handle plus the
@@ -44,4 +42,27 @@ of its analyses. Most users want the typed wrappers
 \code{\link[=ie_scans_metadata_server]{ie_scans_metadata_server()}} / \code{\link[=ie_cf_metadata_server]{ie_cf_metadata_server()}} / \code{\link[=ie_di_metadata_server]{ie_di_metadata_server()}},
 which bind the right \code{\link[=ie_file_server]{ie_file_server()}} accessors; \code{ie_metadata_server()} itself is
 the generic version for wiring a custom metadata source.
+}
+\examples{
+if (interactive()) {
+  library(shiny)
+  iso <-
+    isoreader2::ir_examples_folder() |>
+    isoreader2::ir_find_isofiles() |>
+    isoreader2::ir_read_isofiles()
+
+  ui <- ie_metadata_ui("meta")
+  server <- function(input, output, session) {
+    file <- ie_file_server("files", get_isofiles = reactive(iso))
+    # the generic selector wired to any aggregated-metadata accessors; most
+    # users want the typed wrappers ie_scans_metadata_server() / _cf_ / _di_
+    ie_metadata_server(
+      "meta",
+      get_metadata = file$get_scans_metadata,
+      set_selected = file$set_selected_scans,
+      get_selection = file$get_scans_selection
+    )
+  }
+  shinyApp(ui, server)
+}
 }

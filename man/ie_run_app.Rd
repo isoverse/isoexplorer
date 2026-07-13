@@ -9,7 +9,7 @@ ie_run_app(
   main = NULL,
   setup_modules,
   timezone = Sys.timezone(),
-  default_theme = app_themes()[1],
+  default_theme = app_themes(),
   nav_panels = NULL,
   selected = NULL,
   initial_selection = TRUE,
@@ -21,7 +21,10 @@ ie_run_app(
   options = list(),
   uiPattern = "/",
   enableBookmarking = "url",
-  stop_on_close = FALSE
+  detached = FALSE,
+  launch = TRUE,
+  stop_on_close = detached,
+  log_level = c("WARN", "INFO", "DEBUG", "TRACE", "ERROR", "FATAL")
 )
 }
 \arguments{
@@ -79,17 +82,65 @@ expression in order for the match to be considered successful.}
 any previous calls to  \code{\link[shiny:enableBookmarking]{enableBookmarking()}}. See \code{\link[shiny:enableBookmarking]{enableBookmarking()}}
 for more information on bookmarking your app.}
 
+\item{detached}{if \code{TRUE}, the app is launched in a separate R process (via
+\code{\link[callr:r_bg]{callr::r_bg()}}, the app handed over in a temporary \code{.rds}) and opened in your
+default browser, leaving the calling session free; closing the browser tab
+stops the app and the process (which is also killed if the calling session
+exits). Default \code{FALSE}.}
+
+\item{launch}{only relevant when \code{detached = FALSE}: if \code{TRUE} (the default) the app is
+run in the current session (blocking) with \code{\link[shiny:runApp]{shiny::runApp()}}; if \code{FALSE} the
+\code{\link[shiny:shinyApp]{shiny::shinyApp()}} object is returned unrun (for server deployment or manual
+launching). Ignored when \code{detached = TRUE} (a detached app is always run).}
+
 \item{stop_on_close}{if \code{TRUE}, the app stops itself when the browser
-disconnects (\code{session$onSessionEnded()}); used by the detached explorers so
-their separate process exits when the tab is closed. Default \code{FALSE}.}
+disconnects (\code{session$onSessionEnded()}); set automatically for the detached
+process so it exits when the tab is closed. Defaults to the same as \code{detached}.}
+
+\item{log_level}{how verbosely the app logs, one of \code{"WARN"} (the default --
+only warnings and errors), \code{"INFO"}, \code{"DEBUG"}, \code{"TRACE"} (everything),
+\code{"ERROR"}, or \code{"FATAL"}. Sets the \code{LOG_LEVEL} environment variable that
+\link[rlog:log_trace]{rlog} reads (also applied in the detached process).}
 }
 \value{
-a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object
+When \code{detached = TRUE}, the \code{\link[callr:r_bg]{callr::r_bg()}} process (invisibly, with the
+app URL attached as an attribute); when \code{detached = FALSE} and \code{launch = TRUE},
+the result of \code{\link[shiny:runApp]{shiny::runApp()}} (after the app stops); when \code{detached = FALSE}
+and \code{launch = FALSE}, the \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
 }
 \description{
 Wraps your own module composition in the isoexplorer navbar shell (theme
-picker, dark-mode toggle, about popup) and returns a \code{\link[shiny:shinyApp]{shiny::shinyApp()}}. Build
-your layout from the package's modules, instantiate the \code{\link[=ie_file_server]{ie_file_server()}} and
-wire the modules in \code{setup_modules}. Supply EITHER \code{main} (a single content
-area) OR \code{nav_panels} (a centered navbar tabset).
+picker, dark-mode toggle, about popup) and, by default, runs it. Build your
+layout from the package's modules, instantiate the \code{\link[=ie_file_server]{ie_file_server()}} and wire
+the modules in \code{setup_modules}. Supply EITHER \code{main} (a single content area) OR
+\code{nav_panels} (a centered navbar tabset).
+}
+\details{
+The \code{detached} / \code{launch} arguments control how it runs: \code{detached = TRUE}
+launches it in a separate R process (leaving this session free);
+\verb{detached = FALSE, launch = TRUE} (the default) runs it in the current session
+(blocking) with \code{\link[shiny:runApp]{shiny::runApp()}}; \verb{detached = FALSE, launch = FALSE} returns
+the \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object unrun (for deployment or manual launching). The
+focused explorers (\code{\link[=ie_explore_continuous_flow]{ie_explore_continuous_flow()}} etc.) and
+\code{\link[=ie_create_isofiles_server]{ie_create_isofiles_server()}} are wrappers that call this with the appropriate
+\code{detached} / \code{launch}.
+}
+\examples{
+if (interactive()) {
+  # read the bundled isoreader2 examples (a mixed set of all types)
+  iso <-
+    isoreader2::ir_examples_folder() |>
+    isoreader2::ir_find_isofiles() |>
+    isoreader2::ir_read_isofiles()
+
+  # a minimal custom app: a scans selector next to a scans plot
+  ie_run_app(
+    isofiles = iso,
+    main = ie_type_explorer_ui("meta", ie_scans_plot_ui("scan")),
+    setup_modules = function(file, code) {
+      ie_scans_metadata_server("meta", file)
+      ie_scans_plot_server("scan", file)
+    }
+  )
+}
 }
