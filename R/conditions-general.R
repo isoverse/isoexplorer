@@ -46,7 +46,7 @@ try_catch_cnds <- function(
   }
 
   augment_non_rlang_error <- function(cnd) {
-    if (is(cnd, "rlang_error")) {
+    if (inherits(cnd, "rlang_error")) {
       cnd_signal(cnd)
     }
 
@@ -286,7 +286,7 @@ format_cnds <- function(
 
   if (indent > 0) {
     out <-
-      paste0(rep(" ", (indent - 1) * 2) |> paste(collapse = ""), out) |>
+      paste0(rep("\u00a0", (indent - 1) * 2) |> paste(collapse = ""), out) |>
       set_names(" ")
   }
 

@@ -16,7 +16,7 @@ app_themes <- function() {
 
 # intensity unit options offered for aggregation (first one is the default)
 app_units <- function() {
-  c("mV", "V", "fA", "pA", "nA", "µA", "mA", "A", "cps")
+  c("mV", "V", "fA", "pA", "nA", "\u00b5A", "mA", "A", "cps")
 }
 
 # the app's bslib theme for a given preset
@@ -73,7 +73,7 @@ app_ui <- function(
               target = "_blank"
             ),
             " ",
-            as.character(isoreader2:::ir_get_isoextract_version())
+            as.character(isoreader2::ir_get_isoextract_version())
           ),
           div(
             a(
@@ -82,7 +82,7 @@ app_ui <- function(
               target = "_blank"
             ),
             " ",
-            as.character(packageVersion("isoreader2"))
+            as.character(utils::packageVersion("isoreader2"))
           ),
           div(
             a(
@@ -91,7 +91,7 @@ app_ui <- function(
               target = "_blank"
             ),
             " ",
-            as.character(packageVersion("isoexplorer"))
+            as.character(utils::packageVersion("isoexplorer"))
           )
         ),
         placement = "bottom",

@@ -220,7 +220,7 @@ select_species_or_mass <- function(selected, groups) {
 
 # the intensity-unit family an additive-offset pair belongs to, matching
 # isoreader2::ir_calculate_ratios()'s `num_add.{V,nA,cps}` arguments: voltage
-# (V/mV) -> "V", current (A/mA/µA/nA/pA/fA) -> "nA", counts (cps) -> "cps".
+# (V/mV) -> "V", current (A/mA/\u00b5A/nA/pA/fA) -> "nA", counts (cps) -> "cps".
 # Unknown units fall back to "V".
 intensity_unit_family <- function(units) {
   if (is.null(units) || length(units) == 0) {
@@ -228,7 +228,7 @@ intensity_unit_family <- function(units) {
   }
   if (units %in% c("V", "mV")) {
     "V"
-  } else if (units %in% c("A", "mA", "µA", "uA", "nA", "pA", "fA")) {
+  } else if (units %in% c("A", "mA", "\u00b5A", "uA", "nA", "pA", "fA")) {
     "nA"
   } else if (units == "cps") {
     "cps"
