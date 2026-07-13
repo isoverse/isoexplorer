@@ -36,6 +36,31 @@
 #'   depends_on = NULL, group = NULL)` (each `depends_on` is a single id -- the
 #'   tree is single-parent) and `build_document(quarto = FALSE)` (assemble +
 #'   return `list(script, headings)`; exposed mainly for testing).
+#' @examples
+#' if (interactive()) {
+#'   library(shiny)
+#'   # ie_run_app() instantiates the code server for you; here it is wired
+#'   # directly. Register each module's get_code generator into the dependency
+#'   # tree; the "Show code" button (ie_code_ui()) assembles and displays it.
+#'   ui <- bslib::page_fillable(ie_code_ui("code"))
+#'   server <- function(input, output, session) {
+#'     code <- ie_code_server("code")
+#'     code$register("read", "Read data files", get_code = function(input_var = NULL) {
+#'       list(
+#'         code = 'iso <- ir_find_scans("data") |> ir_read_isofiles()',
+#'         output = "iso"
+#'       )
+#'     })
+#'     code$register("agg", "Aggregate data files", depends_on = "read",
+#'       get_code = function(input_var = NULL) {
+#'         list(
+#'           code = sprintf("scans <- %s |> ir_aggregate_isofiles()", input_var),
+#'           output = "scans"
+#'         )
+#'       })
+#'   }
+#'   shinyApp(ui, server)
+#' }
 #' @export
 ie_code_server <- function(id, get_active_group = reactive(NULL)) {
   moduleServer(id, function(input, output, session) {

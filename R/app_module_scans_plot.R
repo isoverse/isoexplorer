@@ -7,11 +7,28 @@
 #' `ie_scans_plot_server()` on one `id`.
 #'
 #' @inheritParams ie_metadata_server
+#' @param file the [ie_file_server()] handle
 #' @return `ie_scans_plot_ui()` returns a UI element; `ie_scans_plot_server()`
 #'   returns a list with a `get_code` generator for the code server (see
 #'   [ie_code_server()])
 #' @seealso [ie_file_server()], [ie_scans_metadata_server()]
 #' @name ie_scans_plot
+#' @examples
+#' if (interactive()) {
+#'   library(shiny)
+#'   iso <-
+#'     isoreader2::ir_examples_folder() |>
+#'     isoreader2::ir_find_isofiles() |>
+#'     isoreader2::ir_read_isofiles()
+#'
+#'   ui <- ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
+#'   server <- function(input, output, session) {
+#'     file <- ie_file_server("files", get_isofiles = reactive(iso))
+#'     ie_scans_metadata_server("meta", file)
+#'     ie_scans_plot_server("scan", file) # reads the selection-filtered data
+#'   }
+#'   shinyApp(ui, server)
+#' }
 #' @export
 ie_scans_plot_ui <- function(id) {
   ns <- NS(id)

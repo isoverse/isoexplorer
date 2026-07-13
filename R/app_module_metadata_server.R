@@ -20,9 +20,30 @@
 #' @param get_select_signal optional reactive carrying file paths the table should
 #'   exclusively select (e.g. `file$get_scans_select_signal`, fired by upload
 #'   auto-select); applied once the table contains those files
-#' @param file the [ie_file_server()] handle (for the typed wrappers)
 #' @return a list with the underlying selector-table handle plus the
 #'   `get_selected_row_id` / `get_selected_metadata` reactives
+#' @examples
+#' if (interactive()) {
+#'   library(shiny)
+#'   iso <-
+#'     isoreader2::ir_examples_folder() |>
+#'     isoreader2::ir_find_isofiles() |>
+#'     isoreader2::ir_read_isofiles()
+#'
+#'   ui <- ie_metadata_ui("meta")
+#'   server <- function(input, output, session) {
+#'     file <- ie_file_server("files", get_isofiles = reactive(iso))
+#'     # the generic selector wired to any aggregated-metadata accessors; most
+#'     # users want the typed wrappers ie_scans_metadata_server() / _cf_ / _di_
+#'     ie_metadata_server(
+#'       "meta",
+#'       get_metadata = file$get_scans_metadata,
+#'       set_selected = file$set_selected_scans,
+#'       get_selection = file$get_scans_selection
+#'     )
+#'   }
+#'   shinyApp(ui, server)
+#' }
 #' @export
 ie_metadata_server <- function(
   id,
@@ -155,9 +176,26 @@ ie_metadata_server <- function(
 #' server. Pair each with a [ie_metadata_ui()] using the same `id`.
 #'
 #' @inheritParams ie_metadata_server
+#' @param file the [ie_file_server()] handle
 #' @return a [ie_metadata_server()] handle
 #' @seealso [ie_file_server()], [ie_metadata_ui()]
 #' @name ie_typed_metadata_servers
+#' @examples
+#' if (interactive()) {
+#'   library(shiny)
+#'   iso <-
+#'     isoreader2::ir_examples_folder() |>
+#'     isoreader2::ir_find_isofiles() |>
+#'     isoreader2::ir_read_isofiles()
+#'
+#'   ui <- ie_metadata_ui("meta")
+#'   server <- function(input, output, session) {
+#'     file <- ie_file_server("files", get_isofiles = reactive(iso))
+#'     # pushes the table's selection into the file server for this type
+#'     ie_scans_metadata_server("meta", file)
+#'   }
+#'   shinyApp(ui, server)
+#' }
 #' @export
 ie_scans_metadata_server <- function(id, file) {
   ie_metadata_server(

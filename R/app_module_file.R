@@ -68,6 +68,26 @@
 #'   `get_aggregated_<type>_data()`; plus `get_<type>_select_signal()` (file paths
 #'   a selector should select, fired by upload auto-select) and `get_active_type()`
 #'   (the type whose tab to activate after an auto-select).
+#' @examples
+#' if (interactive()) {
+#'   library(shiny)
+#'   # read the bundled isoreader2 examples for some scans data
+#'   iso <-
+#'     isoreader2::ir_examples_folder() |>
+#'     isoreader2::ir_find_isofiles() |>
+#'     isoreader2::ir_read_isofiles()
+#'
+#'   ui <- bslib::page_fillable(
+#'     ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
+#'   )
+#'   server <- function(input, output, session) {
+#'     # the hub: every other module reads/writes through this handle
+#'     file <- ie_file_server("files", get_isofiles = reactive(iso))
+#'     ie_scans_metadata_server("meta", file) # selection -> file server
+#'     ie_scans_plot_server("scan", file)     # file server -> plot
+#'   }
+#'   shinyApp(ui, server)
+#' }
 #' @export
 ie_file_server <- function(
   id,
@@ -98,6 +118,10 @@ ie_file_server <- function(
       is.null(monitoring_folders) || is.character(monitoring_folders),
       "must be a character vector of folder paths or NULL"
     )
+  # the file server performs the isoreader2 aggregation, so make sure isoreader2
+  # is attached and its aggregators are registered -- this lets apps built from
+  # the modules directly (a raw shinyApp, not via ie_run_app) work too
+  ensure_isoreader2_attached()
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 

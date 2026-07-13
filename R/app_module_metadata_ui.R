@@ -8,6 +8,9 @@
 #' @param id the module id (must match the paired `*_metadata_server()`)
 #' @return a [bslib::card()] UI element
 #' @seealso [ie_scans_metadata_server()], [ie_file_server()]
+#' @examples
+#' # pair with a *_metadata_server() on the same id inside a shiny app
+#' ie_metadata_ui("meta")
 #' @export
 ie_metadata_ui <- function(id) {
   ns <- NS(id)
