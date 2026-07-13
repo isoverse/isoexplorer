@@ -38,6 +38,7 @@ Imports:
     callr,
     httpuv,
     htmlwidgets,
+    tidyr,
     tidyselect,
     tools,
     utils,
