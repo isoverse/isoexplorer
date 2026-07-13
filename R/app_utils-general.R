@@ -28,6 +28,20 @@ use_app_utils <- function() {
   )
 }
 
+# isoreader2 registers the data aggregators the file server relies on in its
+# .onAttach hook, so it must be attached (not merely loaded via ::) before any
+# aggregation happens. attachNamespace() runs that hook without the
+# library()/require() call CRAN disallows in package code, and is a no-op once
+# isoreader2 is already attached. Called by the app launchers and by
+# ie_file_server(), so apps built from the modules (raw shinyApp, not just
+# ie_run_app) work too.
+ensure_isoreader2_attached <- function() {
+  if (!"isoreader2" %in% .packages()) {
+    attachNamespace("isoreader2")
+  }
+  invisible()
+}
+
 # logging =====
 
 log_any <- function(
@@ -40,7 +54,7 @@ log_any <- function(
 ) {
   ns_prefix <- if (!is.null(ns)) paste0("[", ns(NULL), "] ") else ""
   if (!is.null(toaster)) {
-    log_fun(paste0(ns_prefix, msg, " [GUI msg: '", toaster, "']", collapse = ""))
+    format_inline("{ns_prefix}{msg} [GUI msg: '{toaster}']") |> log_fun()
     bslib::toast(
       HTML(cli::ansi_html(toaster)),
       position = position,
@@ -73,7 +87,7 @@ log_cnds <- function(
     call <- "unknown"
   }
 
-  warnings <- cnds |> filter(type == "warning")
+  warnings <- cnds |> filter(.data$type == "warning")
   if (nrow(warnings) > 0) {
     for (message in warnings$message) {
       log_warning(
@@ -88,7 +102,7 @@ log_cnds <- function(
     }
   }
 
-  errors <- cnds |> filter(type == "error")
+  errors <- cnds |> filter(.data$type == "error")
   if (nrow(errors) > 0) {
     log_error(
       ns = ns,
@@ -111,10 +125,11 @@ log_error <- function(..., ns = NULL, user_msg = NULL, error = NULL) {
       ""
     }
 
+  pkg <- utils::packageName()
   issue_title <- sprintf(
     "Version %s: %s",
-    if (getPackageName() != ".GlobalEnv") {
-      packageVersion(getPackageName())
+    if (!is.null(pkg)) {
+      as.character(utils::packageVersion(pkg))
     } else {
       "app"
     },
@@ -128,8 +143,8 @@ log_error <- function(..., ns = NULL, user_msg = NULL, error = NULL) {
 
   issue_url <- sprintf(
     "https://github.com/isoverse/isoexplorer/issues/new?title=%s&body=%s",
-    URLencode(issue_title, reserved = TRUE),
-    URLencode(HTML(issue_body), reserved = TRUE)
+    utils::URLencode(issue_title, reserved = TRUE),
+    utils::URLencode(HTML(issue_body), reserved = TRUE)
   )
 
   error_screen <- modalDialog(
