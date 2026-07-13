@@ -36,6 +36,9 @@ pkgdown
 # Package specific auxiliary files
 tmp
 README.html
+# runtime output dir created by ie_start_isofiles_server(examples_folder = "examples")
+examples
+uploads
 
 # TEMPORARY
 inst/extdata

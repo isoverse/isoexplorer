@@ -3,6 +3,12 @@
 ^LICENSE\.md$
 ^README\.Rmd$
 ^air\.toml$
-tmp/*
-cache/*
-dev/*
+^\.claude$
+^CLAUDE\.md$
+^cran-comments\.md$
+^\.github$
+^examples$
+^uploads$
+^tmp/*
+^cache/*
+^dev/*
