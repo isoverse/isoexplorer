@@ -35,10 +35,65 @@ test_that("explorers refuse to launch while a document is being rendered", {
   }
 })
 
-test_that("a non-detached explorer returns a runnable shiny app", {
+test_that("a non-detached explorer with launch = FALSE returns a runnable shiny app", {
   iso <- read_cf_examples()
-  app <- ie_explore_scans(iso, detached = FALSE)
+  # detached = FALSE, launch = FALSE hands back the app object without running it
+  app <- ie_explore_scans(iso, detached = FALSE, launch = FALSE)
   expect_s3_class(app, "shiny.appobj")
+})
+
+test_that("ie_run_app dispatches on detached / launch", {
+  iso <- read_cf_examples()
+  build <- function(...) {
+    ie_run_app(
+      isofiles = iso,
+      main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
+      setup_modules = function(file, code) {
+        ie_cf_metadata_server("cf_meta", file)
+        ie_cf_plot_server("cf", file)
+      },
+      ...
+    )
+  }
+
+  # launch = FALSE -> the shiny app object, unrun
+  expect_s3_class(build(detached = FALSE, launch = FALSE), "shiny.appobj")
+
+  # launch = TRUE -> run in-session via runApp() (mocked so nothing blocks)
+  ran <- NULL
+  testthat::local_mocked_bindings(
+    runApp = function(app, ...) {
+      ran <<- app
+      invisible(NULL)
+    },
+    .package = "shiny"
+  )
+  build(detached = FALSE, launch = TRUE)
+  expect_s3_class(ran, "shiny.appobj")
+})
+
+test_that("log_level sets the LOG_LEVEL env var (explorers WARN, server TRACE)", {
+  iso <- read_cf_examples()
+  # LOG_LEVEL is a global side effect -- snapshot and restore it
+  old <- Sys.getenv("LOG_LEVEL", unset = NA)
+  withr::defer(
+    if (is.na(old)) Sys.unsetenv("LOG_LEVEL") else Sys.setenv(LOG_LEVEL = old)
+  )
+
+  Sys.setenv(LOG_LEVEL = "INFO")
+  ie_create_isofiles_server()
+  expect_identical(Sys.getenv("LOG_LEVEL"), "TRACE") # server default
+
+  Sys.setenv(LOG_LEVEL = "INFO")
+  ie_explore_scans(iso, detached = FALSE, launch = FALSE)
+  expect_identical(Sys.getenv("LOG_LEVEL"), "WARN") # explorer default
+
+  Sys.setenv(LOG_LEVEL = "INFO")
+  ie_explore_scans(iso, detached = FALSE, launch = FALSE, log_level = "DEBUG")
+  expect_identical(Sys.getenv("LOG_LEVEL"), "DEBUG")
+
+  # invalid levels are rejected
+  expect_error(ie_create_isofiles_server(log_level = "banana"))
 })
 
 test_that("app_external_browser picks the platform external opener", {
@@ -77,13 +132,16 @@ test_that("detached launch starts a separate process that serves the app", {
   skip_if_not_installed("callr")
   iso <- read_cf_examples()
 
-  proc <- app_launch_detached(
-    "ie_explore_continuous_flow",
-    iso,
-    "my_iso",
-    rlang::quo(FALSE),
-    browser = FALSE
+  # the whole app spec (ie_run_app() arguments) is handed to the child process
+  app_args <- list(
+    isofiles = iso,
+    main = ie_type_explorer_ui("cf_meta", ie_cf_plot_ui("cf")),
+    setup_modules = function(file, code) {
+      ie_cf_metadata_server("cf_meta", file)
+      ie_cf_plot_server("cf", file)
+    }
   )
+  proc <- app_launch_detached(app_args, rlang::quo(FALSE), browser = FALSE)
   on.exit(if (proc$is_alive()) proc$kill(), add = TRUE)
 
   url <- attr(proc, "url")
