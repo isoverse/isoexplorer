@@ -1,4 +1,4 @@
-# isoexplorer 0.4.0
+# isoexplorer 0.4.1
 
 * Initial CRAN submission.
 * Provides a Shiny GUI toolkit to browse, plot, and export stable isotope data

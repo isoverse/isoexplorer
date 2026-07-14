@@ -1,4 +1,9 @@
-## Submission
+## Resubmission
+
+This is a resubmission. In this version I have:
+
+* Put the Title field in title case ('GUI Components to Explore Stable Isotope
+  Data Files'), as requested.
 
 This is a new submission of isoexplorer, a Shiny GUI toolkit for exploring
 stable isotope data files read with the 'isoreader2' package (on CRAN).

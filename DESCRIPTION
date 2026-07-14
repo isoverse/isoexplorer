@@ -1,6 +1,6 @@
 Package: isoexplorer
-Title: GUI components to Explore Stable Isotope Data Files
-Version: 0.4.0
+Title: GUI Components to Explore Stable Isotope Data Files
+Version: 0.4.1
 Authors@R: 
     c(
         person(
