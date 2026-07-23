@@ -1,3 +1,5 @@
+[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/isoexplorer)](https://cran.r-project.org/package=isoexplorer)
+
 # isoexplorer <a href='https://github.com/isoverse/isoexplorer/'> <img src="man/figures/isoexplorer_logo_thumb.png" align="right" width="100" alt="isoexplorer logo"/> </a>
 
 A GUI toolkit for exploring stable isotope data files read with
