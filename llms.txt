@@ -128,7 +128,7 @@ read-only editor.
 - A **headings tree** on the right jumps around the document; the depth
   of each section sets its heading level (`#`, `##`, `###`).
 - Toggle between **plain R** (default) and a **Quarto** view
-  (```` ” ```{r} ” ```` chunks), **Copy** the displayed code to the
+  (```` ```{r} ```` chunks), **Copy** the displayed code to the
   clipboard, or **Download .qmd** (the download adds the YAML front
   matter; the viewer omits it).
 - It always opens with a setup chunk
