@@ -35,7 +35,7 @@ UI element
 # pair with a *_metadata_server() on the same id inside a shiny app
 ie_metadata_ui("meta")
 #> <div class="container-fluid">
-#>   <div class="card bslib-card bslib-mb-spacing html-fill-item html-fill-container" data-bslib-card-init data-full-screen="false" data-require-bs-caller="card()" data-require-bs-version="5" id="bslib-card-6801">
+#>   <div class="card bslib-card bslib-mb-spacing html-fill-item html-fill-container" data-bslib-card-init data-full-screen="false" data-require-bs-caller="card()" data-require-bs-version="5" id="bslib-card-6302">
 #>     <div class="card-body bslib-gap-spacing html-fill-item html-fill-container" style="margin-top:auto;margin-bottom:auto;flex:1 1 auto;">
 #>       <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
 #>         <div class="d-flex gap-2">
