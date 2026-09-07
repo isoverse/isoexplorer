@@ -15,7 +15,8 @@
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../index.html#quick-start">Quick Start</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item"><a class="external-link nav-link" href="https://apps.isoverse.org/isoexplorer">Demo</a></li>
+<li class="nav-item"><a class="nav-link" href="../index.html#quick-start">Quick Start</a></li>
 <li class="nav-item"><a class="nav-link" href="../index.html#show-the-code">Show the Code</a></li>
 <li class="nav-item"><a class="nav-link" href="../index.html#build-your-own">Build Your Own</a></li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
@@ -42,6 +43,7 @@
 <li><p>The mass / ratio checkboxes no longer filter the plotted data in the app. The selection is passed to the plot functions as their own <code>species =</code> / <code>mass =</code> / <code>ratio =</code> arguments and isoreader2 does the sub-selecting, so the plot and the generated code can no longer disagree about what is shown. Both arguments default to <code>everything()</code>, so they are emitted only when the selection is narrowed.</p></li>
 <li><p>Fixed un-checking every <strong>ratio</strong> of a species still plotting all of its ratios. The <code>ratio</code> argument was simply omitted when nothing was selected, which the plot functions read as “all of them”; an empty selection is now passed explicitly as <code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code>.</p></li>
 <li><p>Un-checking every <strong>mass</strong> while keeping a ratio checked now plots the ratios on their own (<code>mass = c()</code>) instead of an empty plot. Previously the app filtered the data by mass first, which removed the ratio rows too, since a ratio lives on the row of its numerator mass.</p></li>
+<li><p>New documentation website at <a href="https://isoexplorer.isoverse.org" class="uri">https://isoexplorer.isoverse.org</a>.</p></li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.4.1" id="isoexplorer-041">isoexplorer 0.4.1<a class="anchor" aria-label="anchor" href="#isoexplorer-041"></a></h2><p class="text-muted">CRAN release: 2026-07-22</p>

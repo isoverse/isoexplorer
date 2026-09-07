@@ -8,6 +8,8 @@ visualizing, and exporting isotope data.
 
 Useful links:
 
+- <https://isoexplorer.isoverse.org/>
+
 - <https://github.com/isoverse/isoexplorer>
 
 - Report bugs at <https://github.com/isoverse/isoexplorer/issues>
