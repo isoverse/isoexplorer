@@ -139,28 +139,6 @@ test_that("resolve_selection_filter maps a filter expression to a selection", {
   )
 })
 
-test_that("filter_by_selected_masses keeps only selected mass/species rows", {
-  df <- tibble::tibble(
-    mass = c("44", "45", "28"),
-    species = c("CO2", "CO2", "N2"),
-    y = 1:3
-  )
-
-  # joins on mass + species
-  sel <- tibble::tibble(mass = "44", species = "CO2")
-  expect_equal(filter_by_selected_masses(df, sel)$y, 1L)
-
-  # empty selection -> zero rows, same columns
-  empty <- filter_by_selected_masses(df, df[0L, ])
-  expect_equal(nrow(empty), 0L)
-  expect_equal(names(empty), names(df))
-
-  # joins on mass only when species is absent from df
-  df2 <- tibble::tibble(mass = c("44", "28"), y = 1:2)
-  sel2 <- tibble::tibble(mass = "28", species = "N2")
-  expect_equal(filter_by_selected_masses(df2, sel2)$y, 2L)
-})
-
 test_that("filter_agg_data_by_metadata filters by (uidx, analysis), guards empties", {
   # tables with an analysis column -> analysis-level filtering: selecting one
   # analysis of a multi-analysis file must NOT pull in the file's other analyses
@@ -261,26 +239,6 @@ test_that("ratio_calc_params resolves settings + units to non-default args", {
   )
 })
 
-test_that("plottable_ratios keeps only selected ratios with surviving data", {
-  filtered <- tibble::tibble(
-    mass = c("45", "46"),
-    species = c("CO2", "CO2"),
-    ratio_name = c("45/44", "46/44")
-  )
-  expect_equal(
-    plottable_ratios(filtered, c("45/44", "46/44")),
-    c("45/44", "46/44")
-  )
-  # a ratio whose numerator-mass row was dropped is removed; selection order kept
-  expect_equal(plottable_ratios(filtered[1, ], c("46/44", "45/44")), "45/44")
-  # nothing selected, or no ratio_name column -> empty
-  expect_equal(plottable_ratios(filtered, character(0)), character(0))
-  expect_equal(
-    plottable_ratios(tibble::tibble(mass = "44"), "45/44"),
-    character(0)
-  )
-})
-
 test_that("apply_legend_position sets or hides the legend", {
   p <- ggplot2::ggplot()
   expect_equal(
@@ -291,31 +249,204 @@ test_that("apply_legend_position sets or hides the legend", {
   expect_null(apply_legend_position(NULL, "right")) # NULL passes through
 })
 
+# species_mass_groups()-shaped fixture: two species, N2 with ratios, CO2 without
+mass_groups <- function(
+  species = c("CO2", "N2"),
+  masses = list(c("44", "45", "46"), c("28", "29")),
+  ratios = list(character(0), c("29/28"))
+) {
+  tibble::tibble(species = species, masses = masses, ratios = ratios)
+}
+mass_sel <- function(...) {
+  pairs <- list(...)
+  dplyr::bind_rows(lapply(pairs, function(p) {
+    tibble::tibble(species = p[[1]], mass = p[[2]])
+  }))
+}
+
+test_that("selection_to_plot_args omits everything that is fully selected", {
+  g <- mass_groups()
+  all_sel <- mass_sel(
+    c("CO2", "44"),
+    c("CO2", "45"),
+    c("CO2", "46"),
+    c("N2", "28"),
+    c("N2", "29")
+  )
+  # everything checked -> all defaults, nothing to pass
+  expect_equal(selection_to_plot_args(all_sel, g, "29/28"), list())
+  # no groups (no data yet) -> nothing either
+  expect_equal(selection_to_plot_args(all_sel, NULL), list())
+  expect_equal(selection_to_plot_args(all_sel, g[0, ]), list())
+})
+
+test_that("selection_to_plot_args expresses a de-selected species as species=", {
+  g <- mass_groups()
+  # all of N2 unchecked, CO2 untouched -> species= only (masses are complete)
+  keep_co2 <- mass_sel(c("CO2", "44"), c("CO2", "45"), c("CO2", "46"))
+  expect_equal(selection_to_plot_args(keep_co2, g), list(species = "CO2"))
+
+  # two species sharing the same masses: `mass=` alone could not tell them apart,
+  # which is exactly why the species argument is emitted
+  shared <- mass_groups(
+    species = c("CO", "N2"),
+    masses = list(c("28", "29", "30"), c("28", "29", "30")),
+    ratios = list(character(0), character(0))
+  )
+  keep_n2 <- mass_sel(c("N2", "28"), c("N2", "29"), c("N2", "30"))
+  expect_equal(selection_to_plot_args(keep_n2, shared), list(species = "N2"))
+})
+
+test_that("selection_to_plot_args narrows masses with mass=", {
+  g <- mass_groups()
+  # a strict subset within a species -> mass= (sorted, both species still shown)
+  narrowed <- mass_sel(
+    c("CO2", "44"),
+    c("CO2", "45"),
+    c("N2", "28"),
+    c("N2", "29")
+  )
+  expect_equal(
+    selection_to_plot_args(narrowed, g, "29/28"),
+    list(mass = c("44", "45", "28", "29") |> sort())
+  )
+  # species dropped AND masses narrowed -> both arguments
+  both <- mass_sel(c("CO2", "44"))
+  expect_equal(
+    selection_to_plot_args(both, g),
+    list(species = "CO2", mass = "44")
+  )
+})
+
+test_that("selection_to_plot_args marks a fully empty selection with c()", {
+  g <- mass_groups()
+  # nothing checked at all -> explicit "no masses, no ratios" and NO species
+  # filter (an empty species filter would error rather than draw nothing)
+  expect_equal(
+    selection_to_plot_args(mass_sel(), g),
+    list(mass = character(0), ratio = character(0))
+  )
+  expect_equal(
+    selection_to_plot_args(NULL, g),
+    list(mass = character(0), ratio = character(0))
+  )
+})
+
+test_that("selection_to_plot_args ignores masses that are not in the data", {
+  g <- mass_groups()
+  # a stale checkbox (e.g. just after a unit / scan-type change) must not name a
+  # mass isoreader2 would reject
+  stale <- mass_sel(c("CO2", "44"), c("CO2", "99"))
+  expect_equal(
+    selection_to_plot_args(stale, g),
+    list(species = "CO2", mass = "44")
+  )
+})
+
+test_that("selection_to_plot_args handles ratios independently of masses", {
+  g <- mass_groups()
+  all_masses <- mass_sel(
+    c("CO2", "44"),
+    c("CO2", "45"),
+    c("CO2", "46"),
+    c("N2", "28"),
+    c("N2", "29")
+  )
+  # all ratios checked -> omitted (everything() is the default)
+  expect_equal(selection_to_plot_args(all_masses, g, "29/28"), list())
+  # no ratio checked -> explicit none, which is what stops the plot function from
+  # falling back to everything() and showing ratios the user hid
+  expect_equal(
+    selection_to_plot_args(all_masses, g, character(0)),
+    list(ratio = character(0))
+  )
+  # a checked ratio keeps its species shown even when all of its masses are
+  # unchecked -- "just the ratio, no intensities" has to stay expressible
+  ratio_only <- selection_to_plot_args(mass_sel(c("CO2", "44")), g, "29/28")
+  expect_null(ratio_only$species) # N2 is still shown (via its ratio)
+  expect_equal(ratio_only$mass, "44") # ... but none of its masses
+
+  # nothing of N2 checked at all -> N2 drops out, and its ratio is never named:
+  # naming a ratio that the species filter removed is an error in isoreader2
+  g2 <- mass_groups(ratios = list("45/44", "29/28"))
+  scoped <- selection_to_plot_args(
+    mass_sel(c("CO2", "44"), c("CO2", "45"), c("CO2", "46")),
+    g2,
+    "45/44"
+  )
+  expect_equal(scoped$species, "CO2")
+  expect_null(scoped$mass) # all CO2 masses kept
+  expect_null(scoped$ratio) # all of CO2's ratios kept -> default
+})
+
+test_that("selection_is_empty spots a fully hidden selection", {
+  # both explicitly none -> nothing to draw
+  expect_true(selection_is_empty(list(
+    mass = character(0),
+    ratio = character(0)
+  )))
+  expect_false(selection_is_empty(list()))
+  expect_false(selection_is_empty(list(mass = "44")))
+  # no masses but a ratio still draws something ...
+  expect_false(selection_is_empty(list(mass = character(0), ratio = "45/44")))
+  # ... and so does an ABSENT ratio, which means "all of them" rather than none
+  expect_false(selection_is_empty(list(mass = character(0))))
+
+  # the pairing selection_is_empty() relies on: whenever nothing can be drawn,
+  # selection_to_plot_args() emits BOTH arguments as an explicit none
+  g <- mass_groups()
+  # every mass AND every ratio un-checked
+  expect_true(selection_is_empty(selection_to_plot_args(
+    mass_sel(),
+    g,
+    character(0)
+  )))
+  # every mass un-checked and there are no ratios to fall back on
+  no_ratios <- mass_groups(ratios = list(character(0), character(0)))
+  expect_true(selection_is_empty(selection_to_plot_args(mass_sel(), no_ratios)))
+  # but a still-checked ratio keeps it non-empty (that is the "ratios only" view)
+  expect_false(selection_is_empty(selection_to_plot_args(
+    mass_sel(),
+    g,
+    "29/28"
+  )))
+})
+
+test_that("selection args render as NULL for a plot call and c() for code", {
+  args <- list(species = "CO2", mass = character(0), ratio = "45/44")
+  plot_args <- selection_args_for_plot(args)
+  expect_named(plot_args, c("species", "mass", "ratio"))
+  expect_null(plot_args$mass) # the element stays, its value becomes NULL
+  expect_equal(plot_args$ratio, "45/44")
+
+  code_args <- selection_args_for_code(args)
+  expect_equal(code_value(code_args$mass), "c()")
+  expect_equal(code_value(code_args$ratio), '"45/44"')
+})
+
 test_that("build_data_plot returns NULL when there is nothing to plot", {
   plot_fn <- function(dataset, ...) ggplot2::ggplot()
-  masses <- tibble::tibble(mass = "44")
   agg <- list(traces = tibble::tibble(mass = c("44", "45"), x = 1:2))
 
-  expect_null(build_data_plot(NULL, "traces", masses, plot_fn))
-  expect_null(build_data_plot(list(), "traces", masses, plot_fn)) # missing key
+  expect_null(build_data_plot(NULL, "traces", plot_fn))
+  expect_null(build_data_plot(list(), "traces", plot_fn)) # missing key
   expect_null(build_data_plot(
     list(traces = agg$traces[0L, ]),
     "traces",
-    masses,
     plot_fn
-  )) # empty dataset
-  expect_null(build_data_plot(agg, "traces", NULL, plot_fn)) # no selection
+  ))
+  # everything de-selected -> empty plot instead of the plot function's error
   expect_null(build_data_plot(
     agg,
     "traces",
-    tibble::tibble(mass = "99"),
-    plot_fn
-  )) # selection matches nothing
+    plot_fn,
+    selection_args = list(mass = character(0), ratio = character(0))
+  ))
 })
 
-test_that("build_data_plot filters by masses and forwards args to plot_fn", {
+test_that("build_data_plot hands the whole dataset plus the selection to plot_fn", {
   captured <- NULL
-  plot_fn <- function(dataset, scientific, theme, ...) {
+  plot_fn <- function(dataset, scientific, ...) {
     captured <<- list(
       dataset = dataset,
       scientific = scientific,
@@ -324,13 +455,12 @@ test_that("build_data_plot filters by masses and forwards args to plot_fn", {
     ggplot2::ggplot()
   }
   agg <- list(traces = tibble::tibble(mass = c("44", "45"), x = 1:2))
-  masses <- tibble::tibble(mass = "44")
 
   p <- build_data_plot(
     agg,
     "traces",
-    masses,
     plot_fn,
+    selection_args = list(mass = "44", ratio = character(0)),
     scientific = NULL, # coerced via isTRUE() -> FALSE
     legend_position = "hide",
     time_window = c(0, 10) # extra plot arg flows through ...
@@ -338,73 +468,37 @@ test_that("build_data_plot filters by masses and forwards args to plot_fn", {
 
   expect_s3_class(p, "ggplot")
   expect_equal(p$theme$legend.position, "none")
-  expect_equal(captured$dataset$traces$mass, "44") # filtered to the selection
+  # the data is NOT pre-filtered any more - isoreader2 does the sub-selecting
+  expect_equal(captured$dataset$traces$mass, c("44", "45"))
+  expect_equal(captured$extra$mass, "44")
+  expect_null(captured$extra$ratio) # an explicit "none" is passed as NULL
   expect_false(captured$scientific)
   expect_equal(captured$extra$time_window, c(0, 10))
 })
 
-test_that("build_data_plot forwards selected ratios via ratio=", {
+test_that("build_data_plot leaves color out unless it is given", {
   captured <- NULL
   plot_fn <- function(dataset, scientific, ...) {
-    captured <<- list(...)
+    captured <<- list(names = names(list(...)), args = list(...))
     ggplot2::ggplot()
   }
-  agg <- list(
-    traces = tibble::tibble(
-      species = rep("CO2", 3),
-      mass = c("44", "45", "46"),
-      ratio_name = c(NA, "45/44", "46/44"),
-      x = 1:3
-    )
-  )
-  masses <- tibble::tibble(species = rep("CO2", 3), mass = c("44", "45", "46"))
+  agg <- list(traces = tibble::tibble(mass = "44", x = 1))
 
-  # selected ratios with data -> forwarded as ratio=
+  # no color aesthetic -> the argument is absent, so isoreader2 uses its own
   build_data_plot(
     agg,
     "traces",
-    masses,
     plot_fn,
-    selected_ratios = c("45/44", "46/44")
+    aes_args = list(facet = rlang::quo(file_name))
   )
-  expect_equal(captured$ratio, c("45/44", "46/44"))
+  expect_false("color" %in% captured$names)
 
-  # a ratio whose numerator mass is not selected is dropped
+  # an explicit color is forwarded as a quosure
   build_data_plot(
     agg,
     "traces",
-    tibble::tibble(species = "CO2", mass = "45"),
     plot_fn,
-    selected_ratios = c("45/44", "46/44")
+    aes_args = list(color = rlang::quo(trace))
   )
-  expect_equal(captured$ratio, "45/44")
-
-  # no ratios selected -> no ratio argument at all
-  captured <- NULL
-  build_data_plot(agg, "traces", masses, plot_fn)
-  expect_null(captured$ratio)
-})
-
-test_that("select_species_or_mass chooses species= vs mass= vs nothing", {
-  groups <- tibble::tibble(
-    species = c("A", "B", "C"),
-    masses = list(c("1", "2"), "1", c("1", "2"))
-  )
-  all_sel <- tibble::tibble(
-    species = c("A", "A", "B", "C", "C"),
-    mass = c("1", "2", "1", "1", "2")
-  )
-  # everything selected -> no argument
-  expect_equal(select_species_or_mass(all_sel, groups), list())
-  # whole species C dropped, A and B fully kept -> species=
-  drop_c <- tibble::tibble(species = c("A", "A", "B"), mass = c("1", "2", "1"))
-  expect_equal(
-    select_species_or_mass(drop_c, groups),
-    list(species = c("A", "B"))
-  )
-  # A narrowed to just mass 1 (partial) -> mass=
-  partial <- tibble::tibble(species = c("A", "B"), mass = c("1", "1"))
-  expect_equal(select_species_or_mass(partial, groups), list(mass = "1"))
-  # nothing selected -> no argument
-  expect_equal(select_species_or_mass(all_sel[0, ], groups), list())
+  expect_true("color" %in% captured$names)
 })

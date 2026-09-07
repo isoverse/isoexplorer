@@ -38,7 +38,11 @@ test_that("ie_code_server assembles registered generators depth-first with threa
     expect_match(doc$script, "library(isoreader2)", fixed = TRUE)
     expect_match(doc$script, "library(ggplot2)", fixed = TRUE)
     # output -> input variable threading
-    expect_match(doc$script, "scans <- iso_files |> ir_filter_for_scans()", fixed = TRUE)
+    expect_match(
+      doc$script,
+      "scans <- iso_files |> ir_filter_for_scans()",
+      fixed = TRUE
+    )
     expect_match(doc$script, "scans |> ir_plot_scans()", fixed = TRUE)
     # the recorded line really is the heading line
     lines <- strsplit(doc$script, "\n", fixed = TRUE)[[1]]
@@ -59,10 +63,22 @@ test_that("ie_code_server restricts to the active group", {
       register("isofiles", "Read", get_code = function(input_var = NULL) {
         list(code = "iso_files <- ir_read_isofiles()", output = "iso_files")
       })
-      register("cf_plot", "Plot CF", depends_on = "isofiles", group = "Continuous Flow",
-        get_code = function(input_var = NULL) list(code = "cf()", output = NULL))
-      register("scans_plot", "Plot scans", depends_on = "isofiles", group = "Scans",
-        get_code = function(input_var = NULL) list(code = "scans()", output = NULL))
+      register(
+        "cf_plot",
+        "Plot CF",
+        depends_on = "isofiles",
+        group = "Continuous Flow",
+        get_code = function(input_var = NULL) list(code = "cf()", output = NULL)
+      )
+      register(
+        "scans_plot",
+        "Plot scans",
+        depends_on = "isofiles",
+        group = "Scans",
+        get_code = function(input_var = NULL) {
+          list(code = "scans()", output = NULL)
+        }
+      )
 
       doc <- build_document(quarto = FALSE)
       # the group-less root + the active "Scans" group, NOT "Continuous Flow"

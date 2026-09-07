@@ -39,8 +39,16 @@ test_that("build_code_tree handles the empty registry", {
 
 test_that("render_code_document sets heading levels and line numbers", {
   sections <- list(
-    list(depth = 1L, heading = "Read", code = "iso_files <- ir_read_isofiles()"),
-    list(depth = 2L, heading = "Select", code = "scans <- iso_files |>\n  ir_filter_for_scans()"),
+    list(
+      depth = 1L,
+      heading = "Read",
+      code = "iso_files <- ir_read_isofiles()"
+    ),
+    list(
+      depth = 2L,
+      heading = "Select",
+      code = "scans <- iso_files |>\n  ir_filter_for_scans()"
+    ),
     list(depth = 3L, heading = "Plot", code = "scans |> ir_plot_scans()")
   )
   doc <- render_code_document(sections, quarto = FALSE)
@@ -102,17 +110,23 @@ test_that("code_call builds calls and breaks long ones", {
   expect_equal(code_call("f"), "f()")
   expect_equal(code_call("f", list("x")), 'f("x")')
   expect_equal(code_call("f", list(a = 1, b = 2)), "f(a = 1, b = 2)")
-  long <- code_call("ir_plot_scans", list(
-    scan_type = "highvoltage_scan",
-    masses = c("v44", "v45", "v46"),
-    legend = "bottom"
-  ))
+  long <- code_call(
+    "ir_plot_scans",
+    list(
+      scan_type = "highvoltage_scan",
+      masses = c("v44", "v45", "v46"),
+      legend = "bottom"
+    )
+  )
   expect_match(long, "\n", fixed = TRUE) # multi-line
   expect_match(long, "scan_type = \"highvoltage_scan\"", fixed = TRUE)
 })
 
 test_that("code_raw is emitted verbatim (not quoted)", {
-  expect_equal(code_value(code_raw("ir_default_theme(text_size = 14)")), "ir_default_theme(text_size = 14)")
+  expect_equal(
+    code_value(code_raw("ir_default_theme(text_size = 14)")),
+    "ir_default_theme(text_size = 14)"
+  )
   expect_equal(
     code_call("ir_plot_scans", list(theme = code_raw("ir_default_theme()"))),
     "ir_plot_scans(theme = ir_default_theme())"
@@ -121,7 +135,10 @@ test_that("code_raw is emitted verbatim (not quoted)", {
 
 test_that("code_aes_value handles columns, factors, and non-syntactic names", {
   expect_equal(code_aes_value("species"), "species")
-  expect_equal(code_aes_value("analysis", c("analysis", "uidx")), "factor(analysis)")
+  expect_equal(
+    code_aes_value("analysis", c("analysis", "uidx")),
+    "factor(analysis)"
+  )
   expect_equal(code_aes_value("Peak Center"), "`Peak Center`")
   expect_equal(
     code_aes_value("Peak Center", "Peak Center"),

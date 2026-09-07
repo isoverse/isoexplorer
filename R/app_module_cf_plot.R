@@ -2,7 +2,7 @@
 #'
 #' A plot view for continuous flow trace data, wired to a [ie_file_server()]: it
 #' plots the selection-filtered aggregated `traces` with
-#' [isoreader2::ir_plot_continuous_flow()], with unit, species/mass, legend, zoom
+#' [isoreader2::ir_plot_traces()], with unit, species/mass, legend, zoom
 #' and PDF-download controls. Pair `ie_cf_plot_ui()` and `ie_cf_plot_server()` on one `id`.
 #'
 #' @inheritParams ie_metadata_server
@@ -32,7 +32,7 @@ ie_cf_plot_ui <- function(id) {
   ns <- NS(id)
   data_plot_view_ui(
     id,
-    # short_time_labels is a continuous-flow-only ir_plot_continuous_flow() option
+    # short_time_labels is a continuous-flow-only ir_plot_traces() option
     extra_options = checkboxInput(
       ns("short_time_labels"),
       "Short time labels",
@@ -50,8 +50,8 @@ ie_cf_plot_server <- function(id, file) {
     get_units = file$get_units,
     set_units = file$set_units,
     dataset_key = "traces",
-    plot_fn = isoreader2::ir_plot_continuous_flow,
-    plot_fn_name = "ir_plot_continuous_flow",
+    plot_fn = isoreader2::ir_plot_traces,
+    plot_fn_name = "ir_plot_traces",
     no_data_message = "No continuous flow trace data selected/available.",
     download_basename = "continuous_flow",
     zoom_arg = "time_window.s",

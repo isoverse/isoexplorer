@@ -402,7 +402,11 @@ setup_data_plot <- function(
     # "data_type" (intensity vs. ratios, added by the plot function) is offered
     # alongside species/mass/trace; faceting defaults to file_name (the plot
     # functions split intensities/ratios into rows automatically via their
-    # data_type_as_facet = auto() option, regardless of the facet column)
+    # data_type_as_facet = auto() option, regardless of the facet column).
+    # "Color by" additionally offers "(default)" -- the initial choice -- which
+    # leaves the colour aesthetic to isoreader2 entirely: it groups an intensity
+    # trace and its ratios into one colour and one legend entry. Picking any
+    # column here (incl. "trace", one colour per trace) overrides that.
     output$aes_options <- renderUI({
       md <- aes_metadata()
       req(md)
@@ -423,8 +427,8 @@ setup_data_plot <- function(
         selectInput(
           ns("color"),
           "Color by:",
-          choices = c("(none)", ch),
-          selected = isolate(input$color) %||% "trace"
+          choices = c("(default)", "(none)", ch),
+          selected = isolate(input$color) %||% "(default)"
         ),
         selectInput(
           ns("linetype"),
@@ -665,24 +669,16 @@ setup_data_plot <- function(
       unique(out)
     })
 
-    # the ratio names actually passed to the plot function / generated code: the
-    # selection restricted to ratios whose numerator-mass rows survive the current
-    # mass selection (and, for scans, the scan-type filter), so the plot's `ratio=`
-    # argument never names a ratio with no data
-    get_plot_ratios <- reactive({
-      sel <- get_selected_ratios()
-      if (length(sel) == 0) {
-        return(character(0))
-      }
-      dataset <- get_ratio_data()[[dataset_key]]
-      if (is.null(dataset) || nrow(dataset) == 0) {
-        return(character(0))
-      }
-      if (!is.null(filter_dataset)) {
-        dataset <- filter_dataset(dataset)
-      }
-      filtered <- filter_by_selected_masses(dataset, get_selected_masses())
-      plottable_ratios(filtered, sel)
+    # the species / mass / ratio selection as the plot function's own arguments.
+    # This is the single place the checkbox state turns into `species=`/`mass=`/
+    # `ratio=`; both the plot and the generated code use it, so they can never
+    # disagree about what is showing. isoreader2 does the actual sub-selecting.
+    get_selection_args <- reactive({
+      selection_to_plot_args(
+        get_selected_masses(),
+        species_masses(),
+        get_selected_ratios()
+      )
     })
 
     # ZOOM (x-axis) ----
@@ -777,10 +773,13 @@ setup_data_plot <- function(
         s <- rlang::sym(v)
         if (v %in% fcols) rlang::quo(factor(!!s)) else rlang::quo(!!s)
       }
-      aes_args <- list(
-        facet = aes_quo(input$facet, "file_name"),
-        color = aes_quo(input$color, "trace")
-      )
+      aes_args <- list(facet = aes_quo(input$facet, "file_name"))
+      # "(default)" leaves `color` out entirely so isoreader2 applies its own
+      # colour grouping (a trace and its ratios share one colour + legend entry)
+      color <- input$color %||% "(default)"
+      if (!identical(color, "(default)")) {
+        aes_args["color"] <- list(aes_quo(color, NULL))
+      }
       linetype_quo <- aes_quo(input$linetype, NULL)
       if (!is.null(linetype_quo)) {
         aes_args$linetype <- linetype_quo
@@ -791,13 +790,12 @@ setup_data_plot <- function(
           list(
             get_ratio_data(),
             dataset_key = dataset_key,
-            selected_masses = get_selected_masses(),
             plot_fn = plot_fn,
+            selection_args = get_selection_args(),
             font_size = input$font_size %||% 16,
             scientific = input$scientific,
             legend_position = input$legend_position %||% "right",
-            aes_args = aes_args,
-            selected_ratios = get_plot_ratios()
+            aes_args = aes_args
           ),
           extra
         )
@@ -861,33 +859,29 @@ setup_data_plot <- function(
       if (!is.null(zoom_arg) && !is.null(z$x_min) && !is.null(z$x_max)) {
         plot_args[[zoom_arg]] <- round(c(z$x_min, z$x_max), 1)
       }
-      # species / mass selection (see select_species_or_mass): `species=` when
-      # whole species were de-selected, `mass=` when narrowed within a species
+      # species / mass / ratio selection -- exactly the arguments the plot itself
+      # is drawn with (see get_selection_args), with an explicit "none" written as
+      # `c()`. Anything left at "all" is simply omitted (the plot functions default
+      # to `everything()`).
       plot_args <- c(
         plot_args,
-        select_species_or_mass(get_selected_masses(), species_masses())
+        selection_args_for_code(get_selection_args())
       )
-      # ratio traces (added by ir_calculate_ratios()): plotted via `ratio=`, which
-      # defaults to none in the plot functions, so it is emitted whenever any ratio
-      # is selected (all of them by default)
-      ratios <- get_plot_ratios()
-      if (length(ratios) > 0) {
-        plot_args$ratio <- ratios
-      }
       # facet / color / linetype aesthetics; numeric metadata columns are
       # factor()-wrapped. The plot functions default to facet = NULL (they split
       # intensities/ratios automatically), so facet is emitted for every choice
-      # except "(none)", which matches that NULL default. color (default trace) and
-      # linetype (default none) emit only when changed; "(none)" color -> `= NULL`.
+      # except "(none)", which matches that NULL default. color is emitted only
+      # when it overrides isoreader2's own colour grouping ("(default)");
+      # "(none)" -> `= NULL`. linetype (default none) emits only when set.
       fcols <- aes_factor_cols()
       facet <- input$facet %||% "file_name"
       if (!identical(facet, "(none)")) {
         plot_args$facet <- code_raw(code_aes_value(facet, fcols))
       }
-      color <- input$color %||% "trace"
+      color <- input$color %||% "(default)"
       if (identical(color, "(none)")) {
         plot_args$color <- code_raw("NULL")
-      } else if (!identical(color, "trace")) {
+      } else if (!identical(color, "(default)")) {
         plot_args$color <- code_raw(code_aes_value(color, fcols))
       }
       linetype <- input$linetype %||% "(none)"

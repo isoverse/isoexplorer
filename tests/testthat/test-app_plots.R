@@ -94,13 +94,13 @@ test_that("Ratios popover emits normalize and respects the unit family", {
   )
 })
 
-test_that("get_code reflects facet (default NULL) and color (default trace)", {
+test_that("get_code reflects facet (default NULL) and color (default isoreader2)", {
   shiny::testServer(
     ie_cf_plot_server,
     args = list(file = mock_file()),
     {
       # facet "(none)" matches the plot function's NULL default -> omitted; color
-      # "(none)" suppresses the (trace) default -> explicit `= NULL`
+      # "(none)" suppresses isoreader2's colour grouping -> explicit `= NULL`
       session$setInputs(facet = "(none)", color = "(none)", linetype = "(none)")
       code <- get_code()$code
       expect_false(grepl("facet =", code, fixed = TRUE))
@@ -113,11 +113,127 @@ test_that("get_code reflects facet (default NULL) and color (default trace)", {
       expect_match(code2, "color = mass", fixed = TRUE)
 
       # facet = file_name (the app default) is emitted now that the plot function
-      # defaults to facet = NULL; color = trace (the function default) is omitted
-      session$setInputs(facet = "file_name", color = "trace")
+      # defaults to facet = NULL; color "(default)" leaves the colour aesthetic to
+      # isoreader2 entirely, so nothing is emitted for it
+      session$setInputs(facet = "file_name", color = "(default)")
       code3 <- get_code()$code
       expect_match(code3, "facet = file_name", fixed = TRUE)
       expect_false(grepl("color =", code3, fixed = TRUE))
+
+      # picking `trace` is now an explicit override (one colour per trace), so it
+      # IS emitted -- it no longer coincides with the plot function's default
+      session$setInputs(color = "trace")
+      expect_match(get_code()$code, "color = trace", fixed = TRUE)
+    }
+  )
+})
+
+# a comparable summary of what a plot actually draws: the traces on screen and
+# the column the colour aesthetic is mapped to
+plot_summary <- function(p) {
+  b <- ggplot2::ggplot_build(p)
+  list(
+    traces = sort(unique(as.character(b$plot$data$trace))),
+    color = rlang::as_label(p$mapping$colour %||% rlang::quo(NULL))
+  )
+}
+
+test_that("the mass/ratio selection reaches the plot function as arguments", {
+  attach_isoreader2()
+  shiny::testServer(
+    ie_cf_plot_server,
+    args = list(file = mock_file()),
+    {
+      session$setInputs(
+        facet = "(none)",
+        color = "(default)",
+        linetype = "(none)"
+      )
+      session$setInputs(
+        ratios_calculate = TRUE,
+        ratios_normalize = FALSE,
+        ratios_num_add = 100,
+        ratios_denom_add = 100,
+        ratios_apply = 1
+      )
+      # untouched checkboxes mean "everything" -> no selection arguments at all
+      expect_equal(get_selection_args(), list())
+
+      # narrowing the masses names them; the ratio stays at its default
+      session$setInputs(CO2 = "44")
+      expect_equal(get_selection_args(), list(mass = "44"))
+
+      # un-checking every ratio is an explicit "none" -- the whole point of the
+      # c() semantics, since omitting `ratio` would show all of them again
+      session$setInputs(`CO2-ratios` = character(0))
+      expect_equal(
+        get_selection_args(),
+        list(mass = "44", ratio = character(0))
+      )
+      expect_match(get_code()$code, "ratio = c()", fixed = TRUE)
+
+      # ... and un-checking every mass while keeping a ratio plots ratios only
+      session$setInputs(CO2 = character(0), `CO2-ratios` = "45/44")
+      expect_equal(
+        get_selection_args(),
+        list(mass = character(0))
+      )
+      expect_match(get_code()$code, "mass = c()", fixed = TRUE)
+    }
+  )
+})
+
+test_that("the generated code reproduces the plot that is on screen", {
+  attach_isoreader2()
+  shiny::testServer(
+    ie_cf_plot_server,
+    args = list(file = mock_file()),
+    {
+      session$setInputs(
+        facet = "(none)",
+        color = "(default)",
+        linetype = "(none)"
+      )
+      session$setInputs(
+        ratios_calculate = TRUE,
+        ratios_normalize = FALSE,
+        ratios_num_add = 100,
+        ratios_denom_add = 100,
+        ratios_apply = 1
+      )
+
+      # the generated code runs against the same (ratio-calculated) data the app
+      # plots, so evaluating it must yield the same traces
+      check_matches <- function(label) {
+        data <- get_ratio_data()
+        generated <- eval(parse(text = get_code()$code))
+        expect_equal(
+          plot_summary(generated),
+          plot_summary(generate_plot()),
+          info = label
+        )
+      }
+
+      check_matches("everything selected")
+
+      session$setInputs(CO2 = "44")
+      check_matches("one mass, all ratios")
+
+      session$setInputs(`CO2-ratios` = character(0))
+      check_matches("one mass, no ratios")
+
+      session$setInputs(CO2 = character(0), `CO2-ratios` = "45/44")
+      check_matches("no masses, one ratio")
+
+      session$setInputs(CO2 = c("44", "45"), `CO2-ratios` = "45/44")
+      check_matches("all masses, one ratio")
+
+      # an explicit colour override must survive into the code too
+      session$setInputs(color = "trace")
+      check_matches("colour by trace")
+
+      session$setInputs(color = "(none)")
+      check_matches("no colour aesthetic")
     }
   )
 })

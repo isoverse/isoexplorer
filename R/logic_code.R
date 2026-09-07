@@ -59,14 +59,22 @@ build_code_tree <- function(specs) {
 # mode. With `quarto = TRUE` each code block is wrapped in a ```{r} chunk;
 # `front_matter` (defaults to `quarto`) additionally prepends the YAML header --
 # the viewer omits it, the download keeps it. Heading line numbers account for both.
-render_code_document <- function(sections, quarto = FALSE, front_matter = quarto) {
+render_code_document <- function(
+  sections,
+  quarto = FALSE,
+  front_matter = quarto
+) {
   empty_headings <- tibble::tibble(
     level = integer(0),
     text = character(0),
     line = integer(0)
   )
   if (length(sections) == 0) {
-    front <- if (front_matter) paste(quarto_front_matter(), collapse = "\n") else ""
+    front <- if (front_matter) {
+      paste(quarto_front_matter(), collapse = "\n")
+    } else {
+      ""
+    }
     return(list(script = front, headings = empty_headings))
   }
   # one block of lines per section (heading, blank, code [in a chunk if quarto])

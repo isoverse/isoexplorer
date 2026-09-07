@@ -169,53 +169,140 @@ species_mass_groups <- function(dataset) {
   groups
 }
 
-# filter a dataset tibble to only the mass (+ species) rows the user selected
-# selected_items is the get_selected_items() result from the mass selector table
-filter_by_selected_masses <- function(df, selected_items) {
-  join_cols <- intersect(c("mass", "species"), names(df))
-  join_cols <- intersect(join_cols, names(selected_items))
-  if (length(join_cols) == 0 || nrow(selected_items) == 0) {
-    return(df[0L, ])
-  }
-  dplyr::inner_join(
-    df,
-    dplyr::select(selected_items, dplyr::all_of(join_cols)),
-    by = join_cols
-  )
-}
-
-# decide the ir_plot_*() species/mass argument for the current selection (pure):
-# `selected` is the selected (species, mass) rows, `groups` is species_mass_groups()
-# (one row per species with a list-column `masses`). Returns list(species=) when
-# whole species were dropped but every kept species keeps all its masses,
-# list(mass=) when masses were narrowed within a species, or list() when
-# everything (or nothing) is selected -- so the plot/code can splice it in.
-select_species_or_mass <- function(selected, groups) {
-  if (is.null(selected) || nrow(selected) == 0L || is.null(groups)) {
-    return(list())
+# Resolve the species/mass/ratio checkbox selection into the `species`, `mass`,
+# and `ratio` arguments of the isoreader2 plot functions (pure).
+#
+# isoreader2 (>= 0.7.0) owns the sub-selection itself: `mass`/`ratio` default to
+# `everything()`, take a character vector to keep exactly those, and take `c()`
+# to keep none. So the app never pre-filters the data - it just names what the
+# user checked and lets the plot function do the rest, which is also what keeps
+# the trace/colour levels (and hence the legend) in isoreader2's hands.
+#
+# `selected` is the selected (species, mass) rows, `groups` is
+# species_mass_groups() (one row per species with `masses` and `ratios`
+# list-columns), `selected_ratios` are the checked ratio names.
+#
+# Returns a named list holding ONLY the arguments that differ from the defaults,
+# where a `character(0)` value means an explicit "none" (`c()`):
+#   * `species` - when only some of the species have anything checked. Emitting it
+#     (rather than relying on `mass` alone) matters when two species share a mass,
+#     e.g. N2 and CO both measured at 28/29/30.
+#   * `mass` - when the checked masses are a strict subset, `character(0)` when no
+#     mass at all is checked (ratios may still be).
+#   * `ratio` - likewise, and always scoped to the species that are being shown,
+#     since naming a ratio that the species filter removed is an error.
+# Everything checked -> an empty list (all defaults).
+selection_to_plot_args <- function(
+  selected,
+  groups,
+  selected_ratios = character(0)
+) {
+  args <- list()
+  if (is.null(groups) || nrow(groups) == 0L) {
+    return(args)
   }
   all_species <- as.character(groups$species)
-  sel_species <- unique(as.character(selected$species))
-  species_level <- all(vapply(
-    sel_species,
-    function(sp) {
-      i <- match(sp, groups$species)
-      setequal(
-        as.character(selected$mass[selected$species == sp]),
-        as.character(groups$masses[[i]])
-      )
-    },
-    logical(1)
-  ))
-  all_masses <- unique(as.character(unlist(groups$masses)))
-  chosen_masses <- unique(as.character(selected$mass))
-  if (species_level && !setequal(sel_species, all_species)) {
-    list(species = sort(sel_species))
-  } else if (!setequal(chosen_masses, all_masses)) {
-    list(mass = sort(chosen_masses))
-  } else {
-    list()
+  masses_of <- function(sp) {
+    i <- match(sp, all_species)
+    if (is.na(i)) character(0) else as.character(groups$masses[[i]])
   }
+  ratios_of <- function(sp) {
+    i <- match(sp, all_species)
+    if (is.na(i)) character(0) else as.character(groups$ratios[[i]])
+  }
+
+  # the checked masses per species, restricted to what is actually in the data:
+  # a stale checkbox (e.g. right after a unit / scan-type change) must never name
+  # a mass that is not there, which isoreader2 reports as an error
+  sel_masses <- lapply(all_species, function(sp) {
+    if (is.null(selected) || nrow(selected) == 0L) {
+      return(character(0))
+    }
+    intersect(
+      as.character(selected$mass[selected$species == sp]),
+      masses_of(sp)
+    )
+  })
+  names(sel_masses) <- all_species
+  # ... and the checked ratios per species, same restriction
+  sel_ratios <- lapply(all_species, function(sp) {
+    intersect(as.character(selected_ratios), ratios_of(sp))
+  })
+  names(sel_ratios) <- all_species
+
+  # a species is shown when anything of it is checked - a mass OR a ratio, so
+  # "no masses, just the ratios" stays expressible
+  shown <- all_species[
+    lengths(sel_masses) > 0L | lengths(sel_ratios) > 0L
+  ]
+  if (length(shown) == 0L) {
+    # nothing checked at all: no species filter (an empty one would error), just
+    # an explicit "no masses and no ratios"
+    return(list(mass = character(0), ratio = character(0)))
+  }
+  if (!setequal(shown, all_species)) {
+    args$species <- sort(shown)
+  }
+
+  # masses: omitted when every shown species keeps all of them
+  chosen_masses <- unique(unlist(sel_masses[shown], use.names = FALSE))
+  all_shown_masses <- unique(unlist(
+    lapply(shown, masses_of),
+    use.names = FALSE
+  ))
+  if (!setequal(chosen_masses, all_shown_masses)) {
+    args$mass <- sort(chosen_masses)
+  }
+
+  # ratios: only meaningful once ir_calculate_ratios() has run, and scoped to the
+  # shown species so the selection can always be resolved
+  available_ratios <- unique(unlist(
+    lapply(shown, ratios_of),
+    use.names = FALSE
+  ))
+  if (length(available_ratios) > 0L) {
+    chosen_ratios <- unique(unlist(sel_ratios[shown], use.names = FALSE))
+    if (!setequal(chosen_ratios, available_ratios)) {
+      args$ratio <- chosen_ratios
+    }
+  }
+  args
+}
+
+# does a selection_to_plot_args() result leave anything to draw? Only an explicit
+# `mass = c()` AND an explicit `ratio = c()` hide everything - the plot functions
+# treat that as an error, so the caller shows the empty plot instead.
+#
+# An ABSENT `ratio` means "all of them" (the everything() default), which still
+# draws whenever ratios exist - so `mass = c()` on its own is the "ratios only"
+# case, not an empty one. selection_to_plot_args() guarantees the pairing: when
+# nothing at all is checked (or there are no ratios to fall back on) it emits both.
+selection_is_empty <- function(args) {
+  explicitly_none <- function(x) !is.null(args[[x]]) && length(args[[x]]) == 0L
+  explicitly_none("mass") && explicitly_none("ratio")
+}
+
+# a selection_to_plot_args() result as arguments for an actual plot call: an
+# explicit "none" (`character(0)`) is passed as NULL, which is what the plot
+# functions read as "select nothing"
+selection_args_for_plot <- function(args) {
+  for (nm in names(args)) {
+    if (length(args[[nm]]) == 0L) {
+      args[nm] <- list(NULL)
+    }
+  }
+  args
+}
+
+# the same result as arguments for generated code, where an explicit "none" reads
+# better as `c()` than as `NULL`
+selection_args_for_code <- function(args) {
+  for (nm in names(args)) {
+    if (length(args[[nm]]) == 0L) {
+      args[[nm]] <- code_raw("c()")
+    }
+  }
+  args
 }
 
 # the intensity-unit family an additive-offset pair belongs to, matching
@@ -282,25 +369,6 @@ ratio_calc_params <- function(settings, units) {
   params
 }
 
-# the subset of `selected_ratios` (ratio names like "45/44") that can actually be
-# plotted from `filtered_dataset` -- i.e. those whose numerator-mass rows survived
-# the mass selection (a ratio lives on its numerator mass row). Keeps the plot/code
-# `ratio=` argument from naming ratios with no data (which the plotting functions
-# treat as an error). Returns selection order, de-duplicated.
-plottable_ratios <- function(filtered_dataset, selected_ratios) {
-  selected_ratios <- as.character(selected_ratios)
-  if (
-    length(selected_ratios) == 0L ||
-      is.null(filtered_dataset) ||
-      !"ratio_name" %in% names(filtered_dataset)
-  ) {
-    return(character(0))
-  }
-  rn <- as.character(filtered_dataset$ratio_name)
-  present <- unique(rn[!is.na(rn)])
-  intersect(selected_ratios, present)
-}
-
 # apply (or hide) the legend on a ggplot; NULL passes through unchanged. A
 # bottom/top legend is laid out vertically (legend.direction = "vertical").
 apply_legend_position <- function(plot, position = "right") {
@@ -317,55 +385,47 @@ apply_legend_position <- function(plot, position = "right") {
   }
 }
 
-# shared cf/di/scans plot pipeline: from metadata-filtered agg_data, restrict the
-# `dataset_key` table to the selected masses, plot it with `plot_fn`, and set the
-# legend. Returns NULL when there is nothing to plot (caller substitutes an empty
-# plot). `aes_args` is a named list of QUOSURES for the tidy-eval aesthetics
+# shared cf/di/scans plot pipeline: plot the metadata-filtered agg_data with
+# `plot_fn` and set the legend. Returns NULL when there is nothing to plot (caller
+# substitutes an empty plot).
+#
+# The data is handed over WHOLE: the species/mass/ratio sub-selection travels as
+# the plot function's own `species=`/`mass=`/`ratio=` arguments (`selection_args`,
+# from selection_to_plot_args()), so isoreader2 does the filtering and keeps
+# ownership of the trace/colour levels and the legend.
+#
+# `aes_args` is a named list of QUOSURES for the tidy-eval aesthetics
 # (facet/color/linetype) -- they are injected so the columns are evaluated as
-# variables, not strings. `selected_ratios` are the ratio names (e.g. "45/44") to
-# add as ratio traces via the plot function's `ratio=` argument (restricted with
-# plottable_ratios() to those with surviving data). Other plot-specific extras
-# (time_window, scan_type, scales, ...) pass through via `...` as plain values.
+# variables, not strings; leave `color` out of it to keep isoreader2's default
+# colour grouping. Other plot-specific extras (time_window, scan_type, scales,
+# ...) pass through via `...` as plain values.
 build_data_plot <- function(
   agg_data,
   dataset_key,
-  selected_masses,
   plot_fn,
+  selection_args = list(),
   font_size = 16,
   scientific = FALSE,
   legend_position = "right",
   aes_args = list(),
-  selected_ratios = character(0),
   ...
 ) {
   if (is.null(agg_data)) {
     return(NULL)
   }
   dataset <- agg_data[[dataset_key]]
-  if (
-    is.null(dataset) ||
-      nrow(dataset) == 0 ||
-      is.null(selected_masses) ||
-      nrow(selected_masses) == 0
-  ) {
+  if (is.null(dataset) || nrow(dataset) == 0) {
     return(NULL)
   }
-
-  filtered <- filter_by_selected_masses(dataset, selected_masses)
-  if (nrow(filtered) == 0) {
+  # everything de-selected -> nothing to draw (the plot functions would error)
+  if (selection_is_empty(selection_args)) {
     return(NULL)
   }
-  agg_data[[dataset_key]] <- filtered
-
-  # ratios are added as extra traces by the plot function via `ratio=`; only
-  # request those whose numerator-mass rows survived the mass selection so the
-  # call never errors on a ratio with no data
-  ratio_arg <- plottable_ratios(filtered, selected_ratios)
 
   # inject the aesthetic quosures alongside the plain-value args
   call_args <- c(
     list(agg_data, scientific = isTRUE(scientific)),
-    if (length(ratio_arg) > 0) list(ratio = ratio_arg) else list(),
+    selection_args_for_plot(selection_args),
     aes_args,
     list(...)
   )
