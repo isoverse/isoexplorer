@@ -1,6 +1,11 @@
-[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/isoexplorer)](https://cran.r-project.org/package=isoexplorer)
+# isoexplorer <a href='https://isoexplorer.isoverse.org/'> <img src="man/figures/isoexplorer_logo_thumb.png" align="right" width="100" alt="isoexplorer logo"/> </a>
 
-# isoexplorer <a href='https://github.com/isoverse/isoexplorer/'> <img src="man/figures/isoexplorer_logo_thumb.png" align="right" width="100" alt="isoexplorer logo"/> </a>
+<!-- badges: start -->
+  [![Documentation](https://img.shields.io/badge/docs-online-brightgreen.svg)](https://isoexplorer.isoverse.org/)
+  [![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/isoexplorer)](https://cran.r-project.org/package=isoexplorer)
+  [![Life cycle](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html)
+  [![R-CMD-check](https://github.com/isoverse/isoexplorer/workflows/R-CMD-check/badge.svg)](https://github.com/isoverse/isoexplorer/actions)
+<!-- badges: end -->
 
 A GUI toolkit for exploring stable isotope data files read with
 [isoreader2](https://github.com/isoverse/isoreader2). It ships ready-to-run
@@ -141,7 +146,7 @@ cf_data <- iso_files |>
 ### Plot continuous flow
 cf_data |>
   ir_filter_metadata(file_name == "my_run_1") |>
-  ir_plot_continuous_flow(
+  ir_plot_traces(
     ratio = c("45/44", "46/44"),
     facet = file_name,
     color = factor(analysis)
@@ -178,7 +183,11 @@ The **Plot Options** sidebar adds:
   date/time columns are wrapped in `factor()` when used as a discrete aesthetic.
   Faceting defaults to `file_name`; intensities and ratios are split into separate
   panels automatically (the plot functions facet on `data_type` whenever both are
-  present, regardless of this choice).
+  present, regardless of this choice). **Color by** additionally offers
+  `(default)` — the initial choice — which leaves the colour aesthetic to
+  isoreader2, so an intensity trace and its ratios share one colour and one legend
+  entry (`CO2: 45, 45/44`); picking `trace` instead gives every trace its own
+  colour and legend entry.
 - **Scales** — facet scales (`free` / `fixed` / `free_x` / `free_y`).
 - **Scientific notation**, **Drop unused levels**, and (continuous flow only)
   **Short time labels**.
@@ -187,9 +196,15 @@ The **Plot Options** sidebar adds:
 The generated code reflects all of this: the aggregate step gains an
 `ir_calculate_ratios()` call (with only the non-default offsets / `normalize_ratios
 = mean`) when **Calculate ratios** is on, and the mass/ratio selections drive the
-plot functions' `mass = ...` / `ratio = ...` arguments — while de-selecting whole
-species (vs. individual masses) is reflected as `species = ...` rather than
-`mass = ...`.
+plot functions' `mass = ...` / `ratio = ...` arguments.
+
+The app never filters the plotted data itself — it only names what you checked and
+lets isoreader2 do the sub-selecting, which is what keeps the plot and the
+generated code in step (and leaves the trace/colour levels to isoreader2). Since
+those arguments default to `everything()`, they are emitted only when you narrow
+the selection: un-checking every mass of a species emits `species = ...`,
+un-checking individual masses emits `mass = c(...)`, and un-checking *all* of them
+emits `mass = c()` — which is how "show me only the ratios" is expressed.
 
 ## Build your own
 

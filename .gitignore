@@ -31,7 +31,9 @@ plots
 doc
 Meta
 release
-pkgdown
+# the pkgdown site is built by CI; only the generated favicons are tracked
+pkgdown/*
+!pkgdown/favicon/
 
 # Package specific auxiliary files
 tmp

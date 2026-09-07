@@ -1,0 +1,79 @@
+title: isoexplorer
+url: https://isoexplorer.isoverse.org
+template:
+  bootstrap: 5
+  bootswatch: litera
+  bslib:
+    base_font: {google: "Inter"}
+    heading_font: {google: "Plus Jakarta Sans"}
+    code_font: {google: "JetBrains Mono"}
+
+development:
+  mode: auto
+
+navbar:
+  title: isoexplorer
+  type: default
+  left:
+  - text: Quick Start
+    href: index.html#quick-start
+  - text: Show the Code
+    href: index.html#show-the-code
+  - text: Build Your Own
+    href: index.html#build-your-own
+  - text: Reference
+    href: reference/index.html
+  - text: Changelog
+    href: news/index.html
+  right:
+  - icon: fa-github fa-lg
+    href: https://github.com/isoverse/isoexplorer
+    aria-label: View on GitHub
+
+reference:
+- title: Explorer apps
+  desc: >
+    These functions launch ready-to-run apps for exploring isofiles read with
+    isoreader2.
+  contents:
+  - ie_explore_continuous_flow
+  - ie_create_isofiles_server
+  - ie_run_app
+
+- title: File server
+  desc: >
+    The hub every module is wired through - it holds the read isofiles, splits
+    them by measurement type, and owns the shared intensity units and the file
+    selection.
+  contents:
+  - ie_file_server
+
+- title: File selector modules
+  desc: >
+    These modules show the metadata of the available files and push the user's
+    selection into the file server.
+  contents:
+  - ie_metadata_ui
+  - ie_metadata_server
+  - ie_typed_metadata_servers
+  - ie_type_explorer_ui
+
+- title: Plot modules
+  desc: >
+    These modules plot the selected data, one per measurement type, with unit,
+    species/mass, zoom, plot option and PDF download controls.
+  contents:
+  - ie_cf_plot
+  - ie_di_plot
+  - ie_scans_plot
+
+- title: Code generation
+  desc: >
+    The "Show code" module that assembles the isoreader2 code reproducing
+    whatever is on screen.
+  contents:
+  - ie_code_server
+
+- title: Package
+  contents:
+  - isoexplorer-package
