@@ -3,7 +3,6 @@
 <!-- badges: start -->
   [![Documentation](https://img.shields.io/badge/docs-online-brightgreen.svg)](https://isoexplorer.isoverse.org/)
   [![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/isoexplorer)](https://cran.r-project.org/package=isoexplorer)
-  [![Life cycle](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html)
   [![R-CMD-check](https://github.com/isoverse/isoexplorer/workflows/R-CMD-check/badge.svg)](https://github.com/isoverse/isoexplorer/actions)
 <!-- badges: end -->
 
