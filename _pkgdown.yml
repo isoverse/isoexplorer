@@ -13,22 +13,22 @@ development:
 
 navbar:
   title: isoexplorer
-  type: default
-  left:
-  - text: Quick Start
-    href: index.html#quick-start
-  - text: Show the Code
-    href: index.html#show-the-code
-  - text: Build Your Own
-    href: index.html#build-your-own
-  - text: Reference
-    href: reference/index.html
-  - text: Changelog
-    href: news/index.html
-  right:
-  - icon: fa-github fa-lg
-    href: https://github.com/isoverse/isoexplorer
-    aria-label: View on GitHub
+  # `structure` + `components` (rather than plain `left:`/`right:` lists) keeps
+  # pkgdown's built-in navbar items -- the search box, the changelog, and the
+  # GitHub icon -- instead of replacing them with only what is listed here
+  structure:
+    left: [quickstart, showcode, buildyourown, reference, news]
+    right: [search, github]
+  components:
+    quickstart:
+      text: Quick Start
+      href: index.html#quick-start
+    showcode:
+      text: Show the Code
+      href: index.html#show-the-code
+    buildyourown:
+      text: Build Your Own
+      href: index.html#build-your-own
 
 reference:
 - title: Explorer apps
