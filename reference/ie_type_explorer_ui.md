@@ -46,7 +46,7 @@ ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
 #> <div class="container-fluid">
 #>   <div class="bslib-sidebar-layout bslib-mb-spacing html-fill-item" data-bslib-sidebar-init="TRUE" data-collapsible-desktop="true" data-collapsible-mobile="true" data-open-desktop="open" data-open-mobile="open" data-require-bs-caller="layout_sidebar()" data-require-bs-version="5" style="--_sidebar-width:40%;">
 #>     <div class="main bslib-gap-spacing html-fill-container">
-#>       <div class="card bslib-card bslib-mb-spacing html-fill-item html-fill-container" data-bslib-card-init data-full-screen="false" data-require-bs-caller="card()" data-require-bs-version="5" id="bslib-card-1652" style="min-height:400px;">
+#>       <div class="card bslib-card bslib-mb-spacing html-fill-item html-fill-container" data-bslib-card-init data-full-screen="false" data-require-bs-caller="card()" data-require-bs-version="5" id="bslib-card-9517" style="min-height:400px;">
 #>         <div class="bslib-sidebar-layout bslib-mb-spacing sidebar-right html-fill-item" data-bslib-sidebar-init="TRUE" data-collapsible-desktop="true" data-collapsible-mobile="true" data-open-desktop="open" data-open-mobile="closed" data-require-bs-caller="layout_sidebar()" data-require-bs-version="5" style="--_sidebar-width:190px;">
 #>           <div class="main bslib-gap-spacing html-fill-container">
 #>             <div class="d-flex align-items-center gap-2 mb-2">
@@ -198,7 +198,7 @@ ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
 #>               <div class="shiny-plot-output html-fill-item" data-brush-clip="TRUE" data-brush-delay="300" data-brush-delay-type="debounce" data-brush-direction="x" data-brush-fill="#9cf" data-brush-id="scan-data_plot_brush" data-brush-opacity="0.25" data-brush-reset-on-new="TRUE" data-brush-stroke="#036" data-dblclick-clip="TRUE" data-dblclick-id="scan-data_plot_dblclick" id="scan-data_plot" style="width:100%;height:400px;"></div>
 #>             </div>
 #>           </div>
-#>           <aside id="bslib-sidebar-5662" class="sidebar" hidden data-resizable>
+#>           <aside id="bslib-sidebar-8012" class="sidebar" hidden data-resizable>
 #>             <div class="sidebar-content bslib-gap-spacing">
 #>               <header class="sidebar-title">Plot Options</header>
 #>               <div id="scan-aes_options" class="shiny-html-output"></div>
@@ -245,7 +245,7 @@ ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
 #>               </div>
 #>             </div>
 #>           </aside>
-#>           <button class="collapse-toggle" type="button" title="Toggle sidebar" aria-expanded="true" aria-controls="bslib-sidebar-5662"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="bi bi-chevron-left collapse-icon" style="fill:currentColor;" aria-hidden="true" role="img" ><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"></path></svg></button>
+#>           <button class="collapse-toggle" type="button" title="Toggle sidebar" aria-expanded="true" aria-controls="bslib-sidebar-8012"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="bi bi-chevron-left collapse-icon" style="fill:currentColor;" aria-hidden="true" role="img" ><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"></path></svg></button>
 #>           <script data-bslib-sidebar-init>bslib.Sidebar.initCollapsibleAll()</script>
 #>         </div>
 #>         <bslib-tooltip placement="auto" bsOptions="[]" data-require-bs-version="5" data-require-bs-caller="tooltip()">
@@ -255,9 +255,9 @@ ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
 #>         <script data-bslib-card-init>bslib.Card.initializeAllCards();</script>
 #>       </div>
 #>     </div>
-#>     <aside class="sidebar html-fill-container" data-resizable id="bslib-sidebar-6143">
+#>     <aside class="sidebar html-fill-container" data-resizable id="bslib-sidebar-7091">
 #>       <div class="sidebar-content bslib-gap-spacing html-fill-item html-fill-container">
-#>         <div class="card bslib-card bslib-mb-spacing html-fill-item html-fill-container" data-bslib-card-init data-full-screen="false" data-require-bs-caller="card()" data-require-bs-version="5" id="bslib-card-8831">
+#>         <div class="card bslib-card bslib-mb-spacing html-fill-item html-fill-container" data-bslib-card-init data-full-screen="false" data-require-bs-caller="card()" data-require-bs-version="5" id="bslib-card-3282">
 #>           <div class="card-body bslib-gap-spacing html-fill-item html-fill-container" style="margin-top:auto;margin-bottom:auto;flex:1 1 auto;">
 #>             <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
 #>               <div class="d-flex gap-2">
@@ -297,7 +297,7 @@ ie_type_explorer_ui("meta", ie_scans_plot_ui("scan"))
 #>         </div>
 #>       </div>
 #>     </aside>
-#>     <button class="collapse-toggle" type="button" title="Toggle sidebar" aria-expanded="true" aria-controls="bslib-sidebar-6143"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="bi bi-chevron-left collapse-icon" style="fill:currentColor;" aria-hidden="true" role="img" ><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"></path></svg></button>
+#>     <button class="collapse-toggle" type="button" title="Toggle sidebar" aria-expanded="true" aria-controls="bslib-sidebar-7091"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="bi bi-chevron-left collapse-icon" style="fill:currentColor;" aria-hidden="true" role="img" ><path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"></path></svg></button>
 #>     <script data-bslib-sidebar-init>bslib.Sidebar.initCollapsibleAll()</script>
 #>   </div>
 #> </div>
