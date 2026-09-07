@@ -29,6 +29,8 @@
   filtered the data by mass first, which removed the ratio rows too, since a
   ratio lives on the row of its numerator mass.
 
+* New documentation website at <https://isoexplorer.isoverse.org>.
+
 # isoexplorer 0.4.1
 
 * Initial CRAN submission.

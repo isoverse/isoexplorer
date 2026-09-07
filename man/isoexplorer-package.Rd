@@ -6,11 +6,14 @@
 \alias{isoexplorer-package}
 \title{isoexplorer: GUI Components to Explore Stable Isotope Data Files}
 \description{
+\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
+
 Provides graphical user interface components to explore stable isotope data files using the 'isoreader2' package, including browsing, visualizing, and exporting isotope data.
 }
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://isoexplorer.isoverse.org/}
   \item \url{https://github.com/isoverse/isoexplorer}
   \item Report bugs at \url{https://github.com/isoverse/isoexplorer/issues}
 }

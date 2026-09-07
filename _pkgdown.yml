@@ -17,9 +17,12 @@ navbar:
   # pkgdown's built-in navbar items -- the search box, the changelog, and the
   # GitHub icon -- instead of replacing them with only what is listed here
   structure:
-    left: [quickstart, showcode, buildyourown, reference, news]
+    left: [demo, quickstart, showcode, buildyourown, reference, news]
     right: [search, github]
   components:
+    demo:
+      text: Demo
+      href: https://apps.isoverse.org/isoexplorer
     quickstart:
       text: Quick Start
       href: index.html#quick-start

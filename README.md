@@ -14,7 +14,9 @@ A GUI toolkit for exploring stable isotope data files read with
 [isoreader2](https://github.com/isoverse/isoreader2). It ships
 ready-to-run explorer apps, a **Show code** feature that writes the
 isoreader2 code to reproduce whatever you’re looking at, **and** a set
-of composable Shiny modules you can recombine into your own app.
+of composable Shiny modules you can recombine into your own app. A live
+demo is available at
+[apps.isoverse.org/isoexplorer](https://publicapps.isoverse.org/app/isoexplorer).
 
 ## Installation
 
