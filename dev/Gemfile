@@ -1,4 +1,4 @@
+# install with 'bundle install'
 source "https://rubygems.org"
-
 gem 'guard'
 gem 'guard-shell'

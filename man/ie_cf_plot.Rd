@@ -22,7 +22,7 @@ list with a \code{get_code} generator for the code server (see \code{\link[=ie_c
 \description{
 A plot view for continuous flow trace data, wired to a \code{\link[=ie_file_server]{ie_file_server()}}: it
 plots the selection-filtered aggregated \code{traces} with
-\code{\link[isoreader2:ir_plot_continuous_flow]{isoreader2::ir_plot_continuous_flow()}}, with unit, species/mass, legend, zoom
+\code{\link[isoreader2:ir_plot_traces]{isoreader2::ir_plot_traces()}}, with unit, species/mass, legend, zoom
 and PDF-download controls. Pair \code{ie_cf_plot_ui()} and \code{ie_cf_plot_server()} on one \code{id}.
 }
 \examples{
