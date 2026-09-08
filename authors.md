@@ -8,7 +8,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/isoverse/isoexplorer/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/isoverse/isoexplorer/blob/v0.5.0/DESCRIPTION)
 
 Kopf S (2026). *isoexplorer: GUI Components to Explore Stable Isotope
 Data Files*. R package version 0.5.0,
